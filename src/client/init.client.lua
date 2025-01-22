@@ -6,11 +6,13 @@ local Player = game:GetService('Players').LocalPlayer
 
 Player.CharacterAdded:Wait()
 
-local Viewport = Player.PlayerGui.ScreenGui.ViewportFrame
-
 
 print("Ready")
-local savedReplay = Replay.New({FrameFrequency = 5, ReplayLocation = Viewport}, {workspace}, {})
+local savedReplay = Replay.New({FrameFrequency = 5}, {workspace}, {})
+local Viewport = savedReplay:CreateViewport(Player.PlayerGui.ScreenGui)
+Viewport.AnchorPoint = Vector2.new(0.5, 0.5)
+Viewport.Size = UDim2.fromScale(0.3, 0.3)
+Viewport.Position = UDim2.fromScale(0.8, 0.5)
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.Keyboard then

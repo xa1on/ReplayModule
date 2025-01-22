@@ -83,12 +83,14 @@ export type ReplayType = {
 	-- Methods
 	StartRecording: (ReplayType) -> nil, -- starts recording the replay
 	StopRecording: (ReplayType) -> nil, -- stops recording the replay
+    UpdateReplayLocation: (ReplayType) -> nil, -- sets the location of the replay to Replay.ReplayID if replay is visible
 	ShowReplay: (ReplayType) -> nil, -- puts replay into ReplayLocation. makes the replay visible
 	HideReplay: (ReplayType) -> nil, -- hides the replay. it gets removed from replaylocation
 	GoToFrame: (ReplayType, number, number, {ModelStateType}?, boolean?) -> {ModelStateType}, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
     GoToTime: (ReplayType, number, {ModelStateType}?, boolean?) -> {ModelStateType}, -- go to a specific time in a replay
 	StopReplay: (ReplayType) -> nil, -- stops the replay on the current frame
 	StartReplay: (ReplayType, number) -> nil, -- starts the replay on the current frame
+    CreateViewport: (ReplayType, Instance) -> Instance, -- Creates a ViewportFrame for the replay. Sets the ReplayLocation to the ViewportFrame and returns the ViewportFrame
 	Clear: (ReplayType) -> nil, -- clears the recording off the replay
 	Destroy: (ReplayType) -> nil -- destroys the replay. the whole replay will be cleared
 }
@@ -291,6 +293,24 @@ local function GetType(item): string
 	return suggestedType
 end
 
+-- Turns seconds into a string in the form minutes : seconds
+
+local function ConvertTime(time: number): string
+    local result: string = ""
+    local minutes: number = 0
+    if time >= 60 then
+        minutes = math.floor(time / 60)
+        result ..= tostring(minutes) .. ":"
+        time -= minutes * 60
+    end
+    result ..= minutes .. ":"
+    if time < 10 then
+        result ..= "0"
+    end
+    result ..= tostring(math.round(time))
+    return result
+end
+
 
 
 
@@ -347,6 +367,8 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		ReplayEnded = Instance.new("BindableEvent"),
 		ReplayFrameChanged = Instance.new("BindableEvent")
 	}
+
+    local ViewportFrameConnections: {RBXScriptConnection} = {}
 	
 	local Replay: ReplayType = {  -- The functions are defined later on ignore warning
 		Frames = {},
@@ -533,6 +555,17 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		return
 	end
 
+    function Replay:UpdateReplayLocation(): nil
+        if not Replay.ReplayVisible then return end
+        for _, inst in pairs(Replay.ActiveClones) do
+            inst.Parent = Replay.Settings.ReplayLocation
+        end
+        if DEBUG then
+			print("Replay Location Updated")
+		end
+        return
+    end
+
     function Replay:ShowReplay(override: boolean?): nil
         if not override and (Replay.Playing or Replay.Recording or Replay.ReplayVisible) then return end
         for _, inst in pairs(Replay.ActiveClones) do
@@ -707,8 +740,147 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		end
 		return
 	end
+
+    function Replay:CreateViewport(parent: Instance): Instance
+        local timescale: number = 1
+        local dragStarted: boolean = false
+        local wasPlaying: boolean = false
+
+        local ViewportFrame = Instance.new("ViewportFrame", parent)
+        ViewportFrame.BorderSizePixel = 0
+        ViewportFrame.BackgroundColor3 = Color3.new(0)
+        ViewportFrame.Ambient = Color3.new(0)
+        ViewportFrame.LightColor = Color3.new(1, 1, 1)
+        ViewportFrame.LightDirection = Vector3.new(-1, -0.6, -0.6)
+        local WorldModel = Instance.new("WorldModel", ViewportFrame)
+        local BottomFrame = Instance.new("Frame", ViewportFrame)
+        BottomFrame.ZIndex = 0
+        BottomFrame.AnchorPoint = Vector2.new(0.5, 1)
+        BottomFrame.Position = UDim2.fromScale(0.5, 1)
+        BottomFrame.Size = UDim2.fromScale(1, 0.1)
+        local UIGradient = Instance.new("UIGradient", BottomFrame)
+        UIGradient.Color = ColorSequence.new(Color3.new(0))
+        UIGradient.Transparency = NumberSequence.new(1, 0)
+        UIGradient.Rotation = 90
+        local BackButton = Instance.new("ImageButton", BottomFrame)
+        BackButton.AnchorPoint = Vector2.new(0.5, 0.5)
+        BackButton.BackgroundTransparency = 1
+        BackButton.Position = UDim2.fromScale(0.46, 0.5)
+        BackButton.Size = UDim2.fromScale(1, 1)
+        BackButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        BackButton.Image = "rbxasset://textures/AnimationEditor/button_control_previous.png"
+        table.insert(ViewportFrameConnections, BackButton.MouseButton1Click:Connect(function()
+            if Replay.Recording or #Replay.Frames < 1 then return end
+            Replay:GoToFrame(1, 0, nil, true)
+            if not Replay.Playing then
+                Replay:StartReplay(timescale)
+            end
+        end))
+        local ForwardButton = Instance.new("ImageButton", BottomFrame)
+        ForwardButton.AnchorPoint = Vector2.new(0.5, 0.5)
+        ForwardButton.BackgroundTransparency = 1
+        ForwardButton.Position = UDim2.fromScale(0.54, 0.5)
+        ForwardButton.Size = UDim2.fromScale(1, 1)
+        ForwardButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        ForwardButton.Image = "rbxasset://textures/AnimationEditor/button_control_next.png"
+        table.insert(ViewportFrameConnections, ForwardButton.MouseButton1Click:Connect(function()
+            if Replay.Recording or #Replay.Frames < 1 then return end
+            if Replay.Playing then
+                Replay:StopReplay()
+            end
+            Replay:GoToFrame(#Replay.Frames, 0, nil, true)
+        end))
+        local PlayButton = Instance.new("ImageButton", BottomFrame)
+        PlayButton.AnchorPoint = Vector2.new(0.5, 0.5)
+        PlayButton.BackgroundTransparency = 1
+        PlayButton.Position = UDim2.fromScale(0.50, 0.5)
+        PlayButton.Size = UDim2.fromScale(1, 1)
+        PlayButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        PlayButton.Image = "rbxasset://textures/DeveloperFramework/MediaPlayerControls/play_button.png"
+        table.insert(ViewportFrameConnections, PlayButton.MouseButton1Click:Connect(function()
+            if Replay.Recording or #Replay.Frames < 1 then return end
+            if Replay.Playing then
+                Replay:StopReplay()
+            else
+                Replay:StartReplay(timescale)
+            end
+        end))
+        table.insert(ViewportFrameConnections, Replay.ReplayStarted:Connect(function()
+            PlayButton.Image = "rbxasset://textures/DeveloperFramework/MediaPlayerControls/pause_button.png"
+        end))
+        table.insert(ViewportFrameConnections, Replay.ReplayEnded:Connect(function()
+            PlayButton.Image = "rbxasset://textures/DeveloperFramework/MediaPlayerControls/play_button.png"
+        end))
+        local Time = Instance.new("TextLabel", BottomFrame)
+        Time.BorderSizePixel = 0
+        Time.AnchorPoint = Vector2.new(0, 0.5)
+        Time.BackgroundTransparency = 1
+        Time.Position = UDim2.fromScale(0.05, 0.5)
+        Time.Size = UDim2.fromScale(2, 0.5)
+        Time.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        Time.FontFace = Font.fromName("SourceSansPro", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        Time.TextColor3 = Color3.new(1, 1, 1)
+        Time.TextScaled = true
+        Time.TextSize = 12
+        local function UpdateTime()
+            if #Replay.Frames < 1 then
+                Time.Text = "0:00 / 0:00"
+            else
+                Time.Text = ConvertTime(Replay.ReplayTime) .. " / " .. ConvertTime(Replay.Frames[#Replay.Frames].Time)
+            end
+        end
+        UpdateTime()
+
+        local Timeline = Instance.new("Frame", ViewportFrame)
+        Timeline.BorderSizePixel = 0
+        Timeline.AnchorPoint = Vector2.new(0.5, 1)
+        Timeline.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+        Timeline.Position = UDim2.fromScale(0.5, 0.9)
+        Timeline.Size = UDim2.fromScale(0.95, 0.01)
+        local TimelineProgress = Instance.new("Frame", Timeline)
+        TimelineProgress.BorderSizePixel = 0
+        TimelineProgress.BackgroundColor3 = Color3.new(1, 1, 1)
+
+        table.insert(ViewportFrameConnections, Timeline.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if Replay.Recording or #Replay.Frames < 1 then return end
+                local time: number = (input.Position.X - Timeline.AbsolutePosition.X) / Timeline.AbsoluteSize.X
+                wasPlaying = Replay.Playing
+                dragStarted = true
+                if wasPlaying then
+                    Replay:StopReplay()
+                end
+                Replay:GoToTime(Replay.Frames[#Replay.Frames].Time * time)
+            end
+        end))
+
+        local function UpdateTimeline()
+            local scale: number = 1
+            if #Replay.Frames > 1 then
+                scale = Replay.ReplayTime / Replay.Frames[#Replay.Frames].Time
+            end
+            TimelineProgress.Size = UDim2.fromScale(scale, 1)
+        end
+        UpdateTimeline()
+        table.insert(ViewportFrameConnections, Replay.ReplayFrameChanged:Connect(function()
+            UpdateTimeline()
+            UpdateTime()
+        end))
+
+        
+
+
+        Replay.Settings.ReplayLocation = WorldModel
+        if Replay.ReplayShown then
+            Replay:UpdateReplayLocation()
+        end
+        return ViewportFrame
+    end
 	
 	function Replay:Clear(): nil
+        if Replay.ReplayVisible then
+            Replay:HideReplay()
+        end
 		for _, connection in ipairs(Replay["Connections"]) do
 			if connection ~= nil then
 				connection:Disconnect()
@@ -730,6 +902,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		for _, event in pairs(CustomEvents) do
 			event:Destroy()
 		end
+        for _, connection in pairs(ViewportFrameConnections) do
+            connection:Disconnect()
+        end
 		
 		table.clear(Replay)
 		if DEBUG then
