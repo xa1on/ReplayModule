@@ -22,14 +22,8 @@ UserInputService.InputEnded:Connect(function(input)
 			savedReplay:StartReplay(1)
 		elseif input.KeyCode == Enum.KeyCode.U then
 			savedReplay:StopReplay()
-		end
+		elseif input.KeyCode == Enum.KeyCode.P then
+			savedReplay:GoToFrame(1,0)
+        end
 	end
-end)
-
-savedReplay.ReplayStarted:Connect(function ()
-	Viewport.Parent.Enabled = true
-end)
-
-savedReplay.ReplayEnded:Connect(function ()
-	Viewport.Parent.Enabled = false
 end)
