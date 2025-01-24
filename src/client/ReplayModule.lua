@@ -134,12 +134,12 @@ local function DumpTable(t1: {}): string
 end
 
 -- Converts a StoredCFrame to a CFrame
-local function StoreCFrameToCFrame(cf1: StoredCFrame): CFrame
+local function StoredCFrameToCFrame(cf1: StoredCFrame): CFrame
 	return CFrame.new(table.unpack(cf1))
 end
 
 -- Converts a CFrame to a StoredCFrame
-local function CFrameToStoreCFrame(cf1: CFrame): StoredCFrame
+local function CFrameToStoredCFrame(cf1: CFrame): StoredCFrame
 	local temp: StoredCFrame = table.pack(cf1:GetComponents())
 	temp["__type"] = "StoredCFrame" -- Required for type detection. ignore warning
 	return temp
@@ -174,7 +174,7 @@ end
 
 -- same as above but for cframes
 local function RoundCFrame(cf: CFrame, digits: number): StoredCFrame
-	local cframeTable: StoredCFrame = CFrameToStoreCFrame(cf)
+	local cframeTable: StoredCFrame = CFrameToStoredCFrame(cf)
 	for index, value in ipairs(cframeTable) do
 		cframeTable[index] = RoundToPlace(value, digits) -- cframes only contain numbers for the indexed part of the table. ignore warning
 	end
@@ -674,7 +674,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                                 values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
                                 if GetType(value) == "StoredCFrame" then
                                     for index2, value2 in ipairs(values) do
-                                        values[index2] = StoreCFrameToCFrame(value2)
+                                        values[index2] = StoredCFrameToCFrame(value2)
                                     end
                                     newStates[index][name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod) -- Ignore warnings here. GetType should protect from any errors
                                 elseif GetType(value) == "Color3" then
@@ -697,16 +697,18 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                         if not clone:IsDescendantOf(game) then
                             clone.Parent = Replay.Settings.ReplayLocation
                         end
-                        if clone:IsA("BasePart") then
-                            clone.Transparency = Replay.CurrentState[index]["Transparency"] or clone.Transparency
-                        end
                     elseif clone:IsA("BasePart") then
-                        clone.Transparency = 1
+                        if clone.Transparency ~= 1 then
+                            clone.Transparency = 1
+                        end
+                        newStates[index].Transparency = nil
                     end
                 elseif GetType(value) == "StoredCFrame" then
-                    clone[name] = StoreCFrameToCFrame(value)
-                else
-                    clone[name] = value
+                    if not ShallowEquals(RoundCFrame(clone[name], Replay.Settings.Rounding), value) then
+                        clone[name] = StoredCFrameToCFrame(value) -- Ignore warnings here. GetType should protect from any errors
+                    end
+                elseif clone[name] ~= value then
+                    clone[name] = value -- same w/ here
                 end
             end
         end
@@ -885,7 +887,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                     Replay:StartReplay(timescale)
                 end
             else
-                TimescaleInput = tostring(timescale)
+                TimescaleInput.Text = tostring(timescale)
             end
         end))
 
@@ -968,12 +970,12 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 			end
 		end
 		Replay.Frames = {}
-        Replay["AllActiveParts"] = {}
-        Replay["StaticClones"] = {}
-        Replay["ActiveClones"] = {}
-        Replay["AllActiveClones"] = {}
-        Replay["CurrentState"] = {}
-        Replay["Connections"] = {}
+        Replay.AllActiveParts = {}
+        Replay.StaticClones = {}
+        Replay.ActiveClones = {}
+        Replay.AllActiveClones = {}
+        Replay.CurrentState = {}
+        Replay.Connections = {}
         Replay.RecordingTime = 0
         Replay.RecordingFrame = 0
         Replay.ReplayTime = 0
