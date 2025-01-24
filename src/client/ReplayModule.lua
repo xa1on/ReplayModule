@@ -88,7 +88,7 @@ export type ReplayType = {
 	-- Methods
 	StartRecording: (ReplayType) -> nil, -- starts recording the replay
 	StopRecording: (ReplayType) -> nil, -- stops recording the replay
-    UpdateReplayLocation: (ReplayType) -> nil, -- sets the location of the replay to Replay.ReplayID if replay is visible
+    UpdateReplayLocation: (ReplayType, Instance?) -> nil, -- sets the location of the replay
 	ShowReplay: (ReplayType, boolean?) -> nil, -- puts replay into ReplayLocation. makes the replay visible
 	HideReplay: (ReplayType) -> nil, -- hides the replay. it gets removed from replaylocation
 	GoToFrame: (ReplayType, number, number, boolean?) -> nil, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
@@ -568,7 +568,8 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 		return
 	end
 
-    function Replay:UpdateReplayLocation(): nil
+    function Replay:UpdateReplayLocation(location: Instance?): nil
+        if location then Replay.Settings.ReplayLocation = location end
         if not Replay.ReplayVisible then return end
         for _, inst in pairs(Replay.ActiveClones) do
             inst.Parent = Replay.Settings.ReplayLocation
