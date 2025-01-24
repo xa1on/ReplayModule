@@ -374,42 +374,41 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 
     local ViewportFrameConnections: {RBXScriptConnection} = {}
 	
-	local Replay: ReplayType = {  -- The functions are defined later on ignore warning
-		Frames = {},
-		["Settings"] = NormalizeSettings(s),
-		["ActiveModels"] = ActiveModels,
-		["AllActiveParts"] = {},
-        ["StaticModels"] = StaticModels or {},
-        ["StaticClones"] = {},
-		["IgnoredModels"] = IgnoredModels or {},
-		["ActiveClones"] = {},
-		["AllActiveClones"] = {},
-        ["CurrentState"] = {},
-		["Connections"] = {},
-		RecordingStarted = CustomEvents.RecordingStarted.Event,
-		RecordingEnded = CustomEvents.RecordingEnded.Event,
-		ReplayStarted = CustomEvents.ReplayStarted.Event,
-        ReplayShown = CustomEvents.ReplayShown.Event,
-        ReplayHidden = CustomEvents.ReplayHidden.Event,
-		ReplayEnded = CustomEvents.ReplayEnded.Event,
-		ReplayFrameChanged = CustomEvents.ReplayFrameChanged.Event,
-		Recording = false,
-		Playing = false,
-        ReplayVisible = false,
-		RecordingTime = 0,
-		RecordingFrame = 0,
-		ReplayTime = 0,
-		ReplayFrame = 0,
-	}
+	local Replay: ReplayType = {}  -- The functions are defined later on ignore warning
+    Replay.Frames = {}
+    Replay["Settings"] = NormalizeSettings(s)
+    Replay["ActiveModels"] = ActiveModels
+    Replay["AllActiveParts"] = {}
+    Replay["StaticModels"] = StaticModels or {}
+    Replay["StaticClones"] = {}
+    Replay["IgnoredModels"] = IgnoredModels or {}
+    Replay["ActiveClones"] = {}
+    Replay["AllActiveClones"] = {}
+    Replay["CurrentState"] = {}
+    Replay["Connections"] = {}
+    Replay.RecordingStarted = CustomEvents.RecordingStarted.Event
+    Replay.RecordingEnded = CustomEvents.RecordingEnded.Event
+    Replay.ReplayStarted = CustomEvents.ReplayStarted.Event
+    Replay.ReplayShown = CustomEvents.ReplayShown.Event
+    Replay.ReplayHidden = CustomEvents.ReplayHidden.Event
+    Replay.ReplayEnded = CustomEvents.ReplayEnded.Event
+    Replay.ReplayFrameChanged = CustomEvents.ReplayFrameChanged.Event
+    Replay.Recording = false
+    Replay.Playing = false
+    Replay.ReplayVisible = false
+    Replay.RecordingTime = 0
+    Replay.RecordingFrame = 0
+    Replay.ReplayTime = 0
+    Replay.ReplayFrame = 0
+    Replay.ReplayT = 0
 	
 	-- Assuming all Replays initially contain no frames
 	function Replay:StartRecording(): nil
 		if Replay.Recording or Replay.Playing then return end
+        if not TableEmpty(Replay.Frames) then
+            Replay:Clear()
+        end
 		Replay.Recording = true
-		Replay.Frames = {}
-		Replay.AllActiveParts = {}
-		Replay.ActiveClones = {}
-		Replay["Connections"] = {} -- Contains all the connections that need to be disconnected after recording is done
 		Replay.RecordingFrame = 1;
 		local startTime: number = time()
 		
@@ -618,7 +617,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         for _, clone in pairs(Replay.ActiveClones) do -- ActiveClones is not continuous sometimes
 			clone.Parent = nil
 		end
-        for _, clone in pairs(Replay.StaticClones) do -- ActiveClones is not continuous sometimes
+        for _, clone in pairs(Replay.StaticClones) do
 			clone.Parent = nil
 		end
         Replay.ReplayVisible = false
@@ -957,13 +956,29 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         if Replay.ReplayVisible then
             Replay:HideReplay()
         end
+        for _, inst in pairs(Replay.ActiveClones) do
+			inst:Destroy()
+		end
+        for _, inst in pairs(Replay.StaticClones) do
+            inst:Destroy()
+        end
 		for _, connection in ipairs(Replay["Connections"]) do
 			if connection ~= nil then
 				connection:Disconnect()
 			end
 		end
-		Replay["Connections"] = {}
-		Replay["Frames"] = {}
+		Replay.Frames = {}
+        Replay["AllActiveParts"] = {}
+        Replay["StaticClones"] = {}
+        Replay["ActiveClones"] = {}
+        Replay["AllActiveClones"] = {}
+        Replay["CurrentState"] = {}
+        Replay["Connections"] = {}
+        Replay.RecordingTime = 0
+        Replay.RecordingFrame = 0
+        Replay.ReplayTime = 0
+        Replay.ReplayFrame = 0
+        Replay.ReplayT = 0
 		if DEBUG then
 			print("Recording Cleared")
 		end
@@ -972,12 +987,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 	
 	function Replay:Destroy(): nil
 		Replay:Clear()
-		for _, inst in pairs(Replay.ActiveClones) do
-			inst:Destroy()
-		end
-        for _, inst in pairs(Replay.StaticClones) do
-            inst:Destroy()
-        end
 		for _, event in pairs(CustomEvents) do
 			event:Destroy()
 		end

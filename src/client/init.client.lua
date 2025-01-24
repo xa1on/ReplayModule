@@ -4,7 +4,13 @@ local Replay = require(script.ReplayModule);
 
 local Player = game:GetService('Players').LocalPlayer
 
-Player.CharacterAdded:Wait()
+print("ReplayModule Loaded")
+
+if not Player.Character then
+	print("Waiting for character to load...")
+	Player.CharacterAdded:Wait()
+end
+
 
 
 print("Ready")
