@@ -92,7 +92,7 @@ export type ReplayType = {
 	ShowReplay: (ReplayType, boolean?) -> nil, -- puts replay into ReplayLocation. makes the replay visible
 	HideReplay: (ReplayType) -> nil, -- hides the replay. it gets removed from replaylocation
 	GoToFrame: (ReplayType, number, number, boolean?) -> nil, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
-    GoToTime: (ReplayType, number, boolean?) -> nil, -- go to a specific time in a replay
+    GoToTime: (ReplayType, number, number, boolean?) -> nil, -- go to a specific time in a replay
 	StopReplay: (ReplayType) -> nil, -- stops the replay on the current frame
 	StartReplay: (ReplayType, number) -> nil, -- starts the replay on the current frame
     CreateViewport: (ReplayType, Instance) -> ViewportFrame, -- Creates a ViewportFrame for the replay. Sets the ReplayLocation to the ViewportFrame and returns the ViewportFrame
@@ -746,7 +746,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 			print("Replay Started")
 		end
 		CustomEvents.ReplayStarted:Fire()
-		startTime = time() - Replay.Frames[Replay.ReplayFrame].Time
+		startTime = time() - (Replay.ReplayTime / timescale)
         local currentTime: number = 0
 		Replay["Connections"][1] = RunService.RenderStepped:Connect(function()
             currentTime = (time() - startTime) * timescale
@@ -862,6 +862,32 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             end
         end
         UpdateTime()
+        local TimescaleInput = Instance.new("TextBox", BottomFrame)
+        TimescaleInput.BorderSizePixel = 0
+        TimescaleInput.AnchorPoint = Vector2.new(1, 0.5)
+        TimescaleInput.BackgroundTransparency = 1
+        TimescaleInput.Position = UDim2.fromScale(0.95, 0.5)
+        TimescaleInput.Size = UDim2.fromScale(2, 0.5)
+        TimescaleInput.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        TimescaleInput.FontFace = Font.fromName("SourceSansPro", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        TimescaleInput.TextColor3 = Color3.new(1, 1, 1)
+        TimescaleInput.TextScaled = true
+        TimescaleInput.TextSize = 12
+        TimescaleInput.Text = tostring(timescale)
+        TimescaleInput.PlaceholderText = "Timescale"
+        table.insert(ViewportFrameConnections, TimescaleInput.FocusLost:Connect(function()
+            if not tonumber(TimescaleInput.Text) then
+                TimescaleInput = tostring(timescale)
+            else
+                timescale = tonumber(TimescaleInput.Text)
+                if Replay.Playing then
+                    Replay:StopReplay()
+                    Replay:StartReplay(timescale)
+                end
+            end
+        end))
+
+
 
         local Timeline = Instance.new("Frame", ViewportFrame)
         Timeline.BorderSizePixel = 0
