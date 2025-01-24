@@ -92,7 +92,7 @@ export type ReplayType = {
 	ShowReplay: (ReplayType, boolean?) -> nil, -- puts replay into ReplayLocation. makes the replay visible
 	HideReplay: (ReplayType) -> nil, -- hides the replay. it gets removed from replaylocation
 	GoToFrame: (ReplayType, number, number, boolean?) -> nil, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
-    GoToTime: (ReplayType, number, number, boolean?) -> nil, -- go to a specific time in a replay
+    GoToTime: (ReplayType, number, boolean?) -> nil, -- go to a specific time in a replay
 	StopReplay: (ReplayType) -> nil, -- stops the replay on the current frame
 	StartReplay: (ReplayType, number) -> nil, -- starts the replay on the current frame
     CreateViewport: (ReplayType, Instance) -> ViewportFrame, -- Creates a ViewportFrame for the replay. Sets the ReplayLocation to the ViewportFrame and returns the ViewportFrame
@@ -878,14 +878,15 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         TimescaleInput.Text = tostring(timescale)
         TimescaleInput.PlaceholderText = "Timescale"
         table.insert(ViewportFrameConnections, TimescaleInput.FocusLost:Connect(function()
-            if not tonumber(TimescaleInput.Text) then
-                TimescaleInput = tostring(timescale)
-            else
-                timescale = tonumber(TimescaleInput.Text)
+            local newTimescale = tonumber(TimescaleInput.Text)
+            if newTimescale then
+                timescale = newTimescale
                 if Replay.Playing then
                     Replay:StopReplay()
                     Replay:StartReplay(timescale)
                 end
+            else
+                TimescaleInput = tostring(timescale)
             end
         end))
 
