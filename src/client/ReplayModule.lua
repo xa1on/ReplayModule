@@ -57,20 +57,20 @@ export type ReplayType = {
 	Frames: {FrameType}, -- stores all the frames in the replay
 	["Settings"]: SettingsTypeStrict, -- settings applied to the replay
 	ActiveModels: {Instance}, -- all models whose properties are kept track of
-    StaticModels: {Instance},
-    StaticClones: {Instance},
+    StaticModels: {Instance}, -- all models that do not move and remain static througout the replay. these models are not tracked
+    StaticClones: {Instance}, -- clones of all static models
 	IgnoredModels: {Instance}, -- all models who are not rendered
 	AllActiveParts: {Instance}, -- all objects, including activeModel children that are being kept track of
 	ActiveClones: {Instance}, -- clones of all active models
 	AllActiveClones: {Instance}, -- actual parts associated with all the active parts in the clones
-    CurrentState: {ModelStateType},
+    CurrentState: {ModelStateType}, -- current ModelStateType values of all models
 	Connections: {RBXScriptConnection}, -- list of connections being used by the replay. they are disconnected and cleared after recording and replay
 	
 	-- Events
 	RecordingStarted: RBXScriptSignal, -- fires when recording starts
 	RecordingEnded: RBXScriptSignal, -- fires when recording ends
-    ReplayShown: RBXScriptSignal,
-    ReplayHidden: RBXScriptSignal,
+    ReplayShown: RBXScriptSignal, -- fires when replay is shown
+    ReplayHidden: RBXScriptSignal, -- fires when replay is hidden
 	ReplayStarted: RBXScriptSignal, -- fires when replay is started
 	ReplayEnded: RBXScriptSignal, -- fires when replay is ended
 	ReplayFrameChanged: RBXScriptSignal, -- fires when the current frame of the replay is changed
