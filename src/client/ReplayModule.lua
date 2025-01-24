@@ -805,9 +805,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         table.insert(ViewportFrameConnections, BackButton.MouseButton1Click:Connect(function()
             if Replay.Recording or #Replay.Frames < 1 then return end
             Replay:GoToFrame(1, 0, true)
-            if not Replay.Playing then
-                Replay:StartReplay(timescale)
-            end
         end))
         local ForwardButton = Instance.new("ImageButton", BottomFrame)
         ForwardButton.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -835,6 +832,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             if Replay.Playing then
                 Replay:StopReplay()
             else
+                if Replay.ReplayFrame == #Replay.Frames then
+                    Replay:GoToFrame(1, 0, true)
+                end
                 Replay:StartReplay(timescale)
             end
         end))
@@ -866,7 +866,8 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         local TimescaleInput = Instance.new("TextBox", BottomFrame)
         TimescaleInput.BorderSizePixel = 0
         TimescaleInput.AnchorPoint = Vector2.new(1, 0.5)
-        TimescaleInput.BackgroundTransparency = 1
+        TimescaleInput.BackgroundColor3 = Color3.new(0, 0, 0)
+        TimescaleInput.BackgroundTransparency = 0.5
         TimescaleInput.Position = UDim2.fromScale(0.95, 0.5)
         TimescaleInput.Size = UDim2.fromScale(2, 0.5)
         TimescaleInput.SizeConstraint = Enum.SizeConstraint.RelativeYY
