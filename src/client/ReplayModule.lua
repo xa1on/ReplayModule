@@ -5,7 +5,9 @@
 --!strict
 local DEBUG = true
 local ID_ATTRIBUTE = "ReplayID"
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 -- Module
 local m = {}
@@ -55,10 +57,13 @@ export type ReplayType = {
 	Frames: {FrameType}, -- stores all the frames in the replay
 	["Settings"]: SettingsTypeStrict, -- settings applied to the replay
 	ActiveModels: {Instance}, -- all models whose properties are kept track of
+    StaticModels: {Instance},
+    StaticClones: {Instance},
 	IgnoredModels: {Instance}, -- all models who are not rendered
 	AllActiveParts: {Instance}, -- all objects, including activeModel children that are being kept track of
 	ActiveClones: {Instance}, -- clones of all active models
 	AllActiveClones: {Instance}, -- actual parts associated with all the active parts in the clones
+    CurrentState: {ModelStateType},
 	Connections: {RBXScriptConnection}, -- list of connections being used by the replay. they are disconnected and cleared after recording and replay
 	
 	-- Events
@@ -84,13 +89,13 @@ export type ReplayType = {
 	StartRecording: (ReplayType) -> nil, -- starts recording the replay
 	StopRecording: (ReplayType) -> nil, -- stops recording the replay
     UpdateReplayLocation: (ReplayType) -> nil, -- sets the location of the replay to Replay.ReplayID if replay is visible
-	ShowReplay: (ReplayType) -> nil, -- puts replay into ReplayLocation. makes the replay visible
+	ShowReplay: (ReplayType, boolean?) -> nil, -- puts replay into ReplayLocation. makes the replay visible
 	HideReplay: (ReplayType) -> nil, -- hides the replay. it gets removed from replaylocation
-	GoToFrame: (ReplayType, number, number, {ModelStateType}?, boolean?) -> {ModelStateType}, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
-    GoToTime: (ReplayType, number, {ModelStateType}?, boolean?) -> {ModelStateType}, -- go to a specific time in a replay
+	GoToFrame: (ReplayType, number, number, boolean?) -> nil, -- go to a specific frame. t (number 0 to 1) represents the progress from that frame to the subsequent frame
+    GoToTime: (ReplayType, number, boolean?) -> nil, -- go to a specific time in a replay
 	StopReplay: (ReplayType) -> nil, -- stops the replay on the current frame
 	StartReplay: (ReplayType, number) -> nil, -- starts the replay on the current frame
-    CreateViewport: (ReplayType, Instance) -> Instance, -- Creates a ViewportFrame for the replay. Sets the ReplayLocation to the ViewportFrame and returns the ViewportFrame
+    CreateViewport: (ReplayType, Instance) -> ViewportFrame, -- Creates a ViewportFrame for the replay. Sets the ReplayLocation to the ViewportFrame and returns the ViewportFrame
 	Clear: (ReplayType) -> nil, -- clears the recording off the replay
 	Destroy: (ReplayType) -> nil -- destroys the replay. the whole replay will be cleared
 }
@@ -300,10 +305,9 @@ local function ConvertTime(time: number): string
     local minutes: number = 0
     if time >= 60 then
         minutes = math.floor(time / 60)
-        result ..= tostring(minutes) .. ":"
         time -= minutes * 60
     end
-    result ..= minutes .. ":"
+    result ..= tostring(minutes) .. ":"
     if time < 10 then
         result ..= "0"
     end
@@ -357,7 +361,7 @@ local InterpMethod: (number | Vector3, number | Vector3, number | Vector3, numbe
 
 
 -- Create a new Replay Object
-function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instance}): ReplayType
+function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instance}?, IgnoredModels: {Instance}?): ReplayType
 	local CustomEvents: CustomEventsType = {
 		RecordingStarted = Instance.new("BindableEvent"),
 		RecordingEnded = Instance.new("BindableEvent"),
@@ -375,9 +379,12 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		["Settings"] = NormalizeSettings(s),
 		["ActiveModels"] = ActiveModels,
 		["AllActiveParts"] = {},
+        ["StaticModels"] = StaticModels or {},
+        ["StaticClones"] = {},
 		["IgnoredModels"] = IgnoredModels or {},
 		["ActiveClones"] = {},
 		["AllActiveClones"] = {},
+        ["CurrentState"] = {},
 		["Connections"] = {},
 		RecordingStarted = CustomEvents.RecordingStarted.Event,
 		RecordingEnded = CustomEvents.RecordingEnded.Event,
@@ -488,6 +495,12 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 			end))
 		end
 
+        for _, inst in ipairs(Replay.StaticModels) do
+            local clone = inst:Clone()
+            GhostPart(clone)
+            table.insert(Replay.StaticClones, clone)
+        end
+
 		if DEBUG then
 			print("Recording Started")
 			--print(DumpTable(Replay))
@@ -507,7 +520,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 				return
 			end
 			newFrame = {
-				["Time"] = Replay.RecordingTime,
+				["Time"] = RoundToPlace(Replay.RecordingTime, Replay.Settings.Rounding),
 				ModelChanges = {}
 			}
 			for index, inst in ipairs(Replay.AllActiveParts) do
@@ -560,6 +573,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         for _, inst in pairs(Replay.ActiveClones) do
             inst.Parent = Replay.Settings.ReplayLocation
         end
+        for _, inst in pairs(Replay.StaticClones) do
+            inst.Parent = Replay.Settings.ReplayLocation
+        end
         if DEBUG then
 			print("Replay Location Updated")
 		end
@@ -569,6 +585,10 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
     function Replay:ShowReplay(override: boolean?): nil
         if not override and (Replay.Playing or Replay.Recording or Replay.ReplayVisible) then return end
         for _, inst in pairs(Replay.ActiveClones) do
+            inst.Parent = Replay.Settings.ReplayLocation
+        end
+
+        for _, inst in pairs(Replay.StaticClones) do
             inst.Parent = Replay.Settings.ReplayLocation
         end
         Replay.ReplayVisible = true
@@ -597,6 +617,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         for _, clone in pairs(Replay.ActiveClones) do -- ActiveClones is not continuous sometimes
 			clone.Parent = nil
 		end
+        for _, clone in pairs(Replay.StaticClones) do -- ActiveClones is not continuous sometimes
+			clone.Parent = nil
+		end
         Replay.ReplayVisible = false
         CustomEvents.ReplayHidden:Fire()
         if DEBUG then
@@ -605,86 +628,95 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         return
     end
 
-	function Replay:GoToFrame(frame: number, t: number, previousStates: {ModelStateType}?, override: boolean?): {ModelStateType}
+	function Replay:GoToFrame(frame: number, t: number, override: boolean?): nil
         if frame < 1 or frame > #Replay.Frames then error("Frame out of range. [1, " .. #Replay.Frames .. "]") end
         if not override and (Replay.Playing or Replay.Recording or not Replay.ReplayVisible or frame == Replay.ReplayFrame) then return end
-        local function SetState(model: Instance, state: ModelStateType, index: number): nil
+        local function SetCurrentState(state: ModelStateType, index: number): nil
 			if state == nil then return end
-			if not previousStates[index] then previousStates[index] = {} end
+            if not Replay.CurrentState[index] then Replay.CurrentState[index] = {} end
 			for name, value in pairs(state) do
 				if value ~= nil then
-					previousStates[index][name] = value
-					if name == "NotDestroyed" then
-						if value then
-							if not model:IsDescendantOf(game) then
-								model.Parent = Replay.Settings.ReplayLocation
-							end
-						elseif model:IsA("BasePart") then
-							model.Transparency = 1
-						end
-					else
-						if GetType(value) == "StoredCFrame" then
-							value = StoreCFrameToCFrame(value)
-						end
-						model[name] = value -- code logic makes sense. ignore warning here. This is a catch all for different states
-					end
+                    Replay.CurrentState[index][name] = value
 				end
 			end
 			return
 		end
         local startFrame: number = Replay.ReplayFrame
-		if not previousStates or TableEmpty(previousStates) then
-            previousStates = {}
-            startFrame = 1
-        end
-        for currentFrame = startFrame, frame, 1 do
-            for index, clone in ipairs(Replay.AllActiveClones) do
-                SetState(clone, Replay.Frames[currentFrame].ModelChanges[index], index)
-            end
-        end
         local f1: FrameType = Replay.Frames[frame]
         local f2: FrameType = Replay.Frames[frame + 1]
-        if f2 then
-            local values: {}
-            for index, clone in ipairs(Replay.AllActiveClones) do
-                local f0 = if frame > 1 then Replay.Frames[frame - 1] else f1
-                local f3 = if frame + 2 <= #Replay.Frames then Replay.Frames[frame + 2] else f2
-                if f2.ModelChanges[index] then
-                    values = {}
-                    for name, value in pairs(f2.ModelChanges[index]) do
-                        if previousStates[index][name] then
-                            values[2] = previousStates[index][name]
-                            values[3] = value
-                            values[1] = (if f0.ModelChanges[index] then f0.ModelChanges[index][name] else values[2]) or values[2]
-                            values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
-                            if GetType(value) == "StoredCFrame" then
-                                for index2, value2 in ipairs(values) do
-                                    values[index2] = StoreCFrameToCFrame(value2)
+        local newStates: {ModelStateType} = {}
+        if frame < startFrame then
+            Replay.CurrentState = {}
+        end
+        if TableEmpty(Replay.CurrentState)  then
+            startFrame = 1
+        end
+        for index, _ in ipairs(Replay.AllActiveClones) do
+            for currentFrame = startFrame, frame, 1 do
+                SetCurrentState(Replay.Frames[currentFrame].ModelChanges[index], index)
+            end
+            newStates[index] = if Replay.CurrentState[index] then ShallowCopy(Replay.CurrentState[index]) else {}
+        end
+        
+        local values: {}
+        for index, clone in ipairs(Replay.AllActiveClones) do
+            if Replay.CurrentState[index]["NotDestroyed"] then
+                if f2 then
+                    local f0 = if frame > 1 then Replay.Frames[frame - 1] else f1
+                    local f3 = if frame + 2 <= #Replay.Frames then Replay.Frames[frame + 2] else f2
+                    if f2.ModelChanges[index] then
+                        values = {}
+                        for name, value in pairs(f2.ModelChanges[index]) do
+                            if Replay.CurrentState[index][name] then
+                                values[2] = Replay.CurrentState[index][name]
+                                values[3] = value
+                                values[1] = (if f0.ModelChanges[index] then f0.ModelChanges[index][name] else values[2]) or values[2]
+                                values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
+                                if GetType(value) == "StoredCFrame" then
+                                    for index2, value2 in ipairs(values) do
+                                        values[index2] = StoreCFrameToCFrame(value2)
+                                    end
+                                    newStates[index][name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod) -- Ignore warnings here. GetType should protect from any errors
+                                elseif GetType(value) == "Color3" then
+                                    newStates[index][name] = Vector3ToColor3(InterpMethod(Color3ToVector3(values[1]), Color3ToVector3(values[2]), Color3ToVector3(values[3]), Color3ToVector3(values[4]), t, 0, 0))
+                                elseif GetType(value) ~= "boolean" then
+                                    newStates[index][name] = InterpMethod(values[1], values[2], values[3], values[4], t, 0, 0)
                                 end
-                                clone[name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod) -- Ignore warnings here. GetType should protect from any errors
-                            elseif GetType(value) == "Color3" then
-                                clone[name] = Vector3ToColor3(InterpMethod(Color3ToVector3(values[1]), Color3ToVector3(values[2]), Color3ToVector3(values[3]), Color3ToVector3(values[4]), t, 0, 0))
-                            elseif GetType(value) ~= "boolean" then
-                                clone[name] = InterpMethod(values[1], values[2], values[3], values[4], t, 0, 0)
-                            elseif name ~= "NotDestroyed" then
-                                clone[name] = if t < 0.5 then values[2] else values[3]
                             end
                         end
                     end
+                    Replay.ReplayTime = t * (f2.Time - f1.Time) + f1.Time
+                else
+                    t = 0
+                    Replay.ReplayTime = f1.Time
                 end
             end
-            Replay.ReplayTime = t * (f2.Time - f1.Time) + f1.Time
-        else
-            t = 0
-            Replay.ReplayTime = f1.Time
+            for name, value in pairs(newStates[index]) do
+                if name == "NotDestroyed" then
+                    if value then
+                        if not clone:IsDescendantOf(game) then
+                            clone.Parent = Replay.Settings.ReplayLocation
+                        end
+                        if clone:IsA("BasePart") then
+                            clone.Transparency = Replay.CurrentState[index]["Transparency"] or clone.Transparency
+                        end
+                    elseif clone:IsA("BasePart") then
+                        clone.Transparency = 1
+                    end
+                elseif GetType(value) == "StoredCFrame" then
+                    clone[name] = StoreCFrameToCFrame(value)
+                else
+                    clone[name] = value
+                end
+            end
         end
         Replay.ReplayT = t
         Replay.ReplayFrame = frame
         CustomEvents.ReplayFrameChanged:Fire()
-        return previousStates
+        return
 	end
 
-    function Replay:GoToTime(time: number, previousStates: {ModelStateType}?, override: boolean?): {ModelStateType}
+    function Replay:GoToTime(time: number, override: boolean?): nil
         local currentFrame: number = 1
         while Replay.Frames[currentFrame].Time < time and currentFrame < #Replay.Frames do
             currentFrame += 1
@@ -692,11 +724,11 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         local f1: FrameType = Replay.Frames[currentFrame - 1]
 		local f2: FrameType = Replay.Frames[currentFrame]
         if f1 then
-            return Replay:GoToFrame(currentFrame - 1, (time - f1.Time) / (f2.Time - f1.Time), previousStates, override)
+            Replay:GoToFrame(currentFrame - 1, (time - f1.Time) / (f2.Time - f1.Time), override)
         else
-            return Replay:GoToFrame(currentFrame, 0, previousStates, override)
+            Replay:GoToFrame(currentFrame, 0, override)
         end
-        
+        return
     end
 
 	function Replay:StartReplay(timescale: number): nil
@@ -709,7 +741,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
             Replay:GoToFrame(1, 0)
         end
 		local startTime: number
-		local previousStates: {ModelStateType} = {}
         Replay.Playing = true
 		if DEBUG then
 			print("Replay Started")
@@ -720,9 +751,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		Replay["Connections"][1] = RunService.RenderStepped:Connect(function()
             currentTime = (time() - startTime) * timescale
             if currentTime < Replay.Frames[#Replay.Frames].Time then
-                previousStates = Replay:GoToTime(currentTime, previousStates, true)
+                Replay:GoToTime(currentTime, true)
             else
-                previousStates = Replay:GoToFrame(#Replay.Frames, 0, previousStates, true)
+                Replay:GoToFrame(#Replay.Frames, 0, true)
                 Replay:StopReplay()
             end
 		end)
@@ -741,10 +772,11 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		return
 	end
 
-    function Replay:CreateViewport(parent: Instance): Instance
+    function Replay:CreateViewport(parent: Instance): ViewportFrame
         local timescale: number = 1
         local dragStarted: boolean = false
         local wasPlaying: boolean = false
+        local mouse: Mouse= game:GetService("Players").LocalPlayer:GetMouse()
 
         local ViewportFrame = Instance.new("ViewportFrame", parent)
         ViewportFrame.BorderSizePixel = 0
@@ -771,7 +803,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         BackButton.Image = "rbxasset://textures/AnimationEditor/button_control_previous.png"
         table.insert(ViewportFrameConnections, BackButton.MouseButton1Click:Connect(function()
             if Replay.Recording or #Replay.Frames < 1 then return end
-            Replay:GoToFrame(1, 0, nil, true)
+            Replay:GoToFrame(1, 0, true)
             if not Replay.Playing then
                 Replay:StartReplay(timescale)
             end
@@ -788,7 +820,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
             if Replay.Playing then
                 Replay:StopReplay()
             end
-            Replay:GoToFrame(#Replay.Frames, 0, nil, true)
+            Replay:GoToFrame(#Replay.Frames, 0, true)
         end))
         local PlayButton = Instance.new("ImageButton", BottomFrame)
         PlayButton.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -841,16 +873,31 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
         TimelineProgress.BorderSizePixel = 0
         TimelineProgress.BackgroundColor3 = Color3.new(1, 1, 1)
 
+        local function XToTime(x: number): number
+            return math.min((x - Timeline.AbsolutePosition.X) / Timeline.AbsoluteSize.X, 1)
+        end
+
         table.insert(ViewportFrameConnections, Timeline.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 if Replay.Recording or #Replay.Frames < 1 then return end
-                local time: number = (input.Position.X - Timeline.AbsolutePosition.X) / Timeline.AbsoluteSize.X
                 wasPlaying = Replay.Playing
                 dragStarted = true
                 if wasPlaying then
                     Replay:StopReplay()
                 end
-                Replay:GoToTime(Replay.Frames[#Replay.Frames].Time * time)
+                Replay:GoToTime(Replay.Frames[#Replay.Frames].Time * XToTime(input.Position.X))
+            end
+        end))
+        table.insert(ViewportFrameConnections, mouse.Move:Connect(function()
+            if not dragStarted then return end
+            local mouseX = mouse.X
+            Replay:GoToTime(Replay.Frames[#Replay.Frames].Time * XToTime(mouseX))
+        end))
+        table.insert(ViewportFrameConnections, mouse.Button1Up:Connect(function()
+            if not dragStarted then return end
+            dragStarted = false
+            if wasPlaying then
+                Replay:StartReplay(timescale)
             end
         end))
 
@@ -899,6 +946,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, IgnoredModels: {Instan
 		for _, inst in pairs(Replay.ActiveClones) do
 			inst:Destroy()
 		end
+        for _, inst in pairs(Replay.StaticClones) do
+            inst:Destroy()
+        end
 		for _, event in pairs(CustomEvents) do
 			event:Destroy()
 		end

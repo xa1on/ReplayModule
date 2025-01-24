@@ -8,7 +8,7 @@ Player.CharacterAdded:Wait()
 
 
 print("Ready")
-local savedReplay = Replay.New({FrameFrequency = 5}, {workspace}, {})
+local savedReplay = Replay.New({FrameFrequency = 5}, {Player.Character, workspace.sphere, workspace.CurrentCamera}, {workspace.enclosure, workspace.Baseplate, workspace.SpawnLocation}, {})
 local Viewport = savedReplay:CreateViewport(Player.PlayerGui.ScreenGui)
 Viewport.AnchorPoint = Vector2.new(0.5, 0.5)
 Viewport.Size = UDim2.fromScale(0.3, 0.3)
