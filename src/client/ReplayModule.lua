@@ -512,7 +512,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 		--   Actual recording part
 		local newState: ModelStateType -- temp table containing the state of the current part
 		local change: boolean -- temp variable used to indicate whether or not a value has changed
-		table.insert(Replay["Connections"], RunService.RenderStepped:Connect(function()
+		table.insert(Replay["Connections"], RunService.Heartbeat:Connect(function()
 			recordFrameCounter -= 1
 			Replay.RecordingTime = time() - startTime
 			if recordFrameCounter == 0 then
