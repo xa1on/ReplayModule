@@ -281,7 +281,7 @@ local function GetState(inst: Instance, rounding: number): ModelStateType
 	if inst:IsA("BasePart") then
 		state["CFrame"] = RoundCFrame(inst.CFrame, rounding)
 		state["Color"] = RoundColor3(inst.Color, rounding)
-		state["Transparency"] = RoundToPlace(inst.Transparency, rounding)
+		state["Transparency"] = RoundToPlace(1 - ((1 - inst.Transparency) * (1 - inst.LocalTransparencyModifier)), rounding)
 	elseif inst:IsA("Camera") then
 		state["CFrame"] = RoundCFrame(inst.CFrame, rounding)
 		state["FieldOfView"] = RoundToPlace(inst.FieldOfView, rounding)
