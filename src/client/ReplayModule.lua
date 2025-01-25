@@ -427,12 +427,8 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 
         local currentIndex = 1
 		local function Register(model:Instance): number
-            local index: number = model:GetAttribute(ID_ATTRIBUTE)
-			if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not ((model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) and not (index and Replay.AllActiveParts[index])) then return 0 end
-            if not index then
-                index = currentIndex
-                currentIndex += 1
-            end
+			if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
+            local index: number = #Replay.AllActiveParts + 1
 			previousStates[index] = GetState(model, Replay.Settings.Rounding)
             Replay.Frames[Replay.RecordingFrame].ModelChanges[index] = GetState(model, Replay.Settings.Rounding)
             Replay.AllActiveParts[index] = model
