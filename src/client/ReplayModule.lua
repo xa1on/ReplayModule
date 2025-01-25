@@ -285,7 +285,7 @@ local function GetState(inst: Instance, rounding: number): ModelStateType
 	elseif inst:IsA("Camera") then
 		state["CFrame"] = RoundCFrame(inst.CFrame, rounding)
 		state["FieldOfView"] = RoundToPlace(inst.FieldOfView, rounding)
-	end
+    end
 	return state
 end
 
@@ -425,18 +425,24 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 
 		Replay.Frames[Replay.RecordingFrame] = initalFrame
 
+        local currentIndex = 1
 		local function Register(model:Instance): number
-			if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
-			local index: number = #Replay.AllActiveParts + 1
+            local index: number = model:GetAttribute(ID_ATTRIBUTE)
+			if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not ((model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) and not (index and Replay.AllActiveParts[index])) then return 0 end
+            if not index then
+                index = currentIndex
+                currentIndex += 1
+            end
 			previousStates[index] = GetState(model, Replay.Settings.Rounding)
-			Replay.Frames[Replay.RecordingFrame].ModelChanges[index] = GetState(model, Replay.Settings.Rounding)
-			Replay.AllActiveParts[index] = model
-			model:SetAttribute(ID_ATTRIBUTE, index)
-			if Replay.RecordingFrame ~= 1 then
-				Replay.Frames[1].ModelChanges[index] = {
-					["NotDestroyed"] = false
-				}
-			end
+            Replay.Frames[Replay.RecordingFrame].ModelChanges[index] = GetState(model, Replay.Settings.Rounding)
+            Replay.AllActiveParts[index] = model
+            model:SetAttribute(ID_ATTRIBUTE, index)
+            if Replay.RecordingFrame ~= 1 then
+                Replay.Frames[1].ModelChanges[index] = {
+                    ["NotDestroyed"] = false
+                }
+            end
+			
 			return index
 		end
 
@@ -525,18 +531,18 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 			for index, inst in ipairs(Replay.AllActiveParts) do
 				newState = GetState(inst, Replay.Settings.Rounding)
 				for pindex, pval in pairs(newState) do
-					if typeof(pval) == "table" then
-						change = not ShallowEquals(pval, previousStates[index][pindex])
-					else
-						change = previousStates[index][pindex] ~= pval
-					end
-					if change then
-						previousStates[index][pindex] = pval
-						if not newFrame.ModelChanges[index] then
-							newFrame.ModelChanges[index] = {}
-						end
-						newFrame.ModelChanges[index][pindex] = pval
-					end
+                    if typeof(pval) == "table" then
+                        change = not ShallowEquals(pval, previousStates[index][pindex])
+                    else
+                        change = previousStates[index][pindex] ~= pval
+                    end
+                    if change then
+                        previousStates[index][pindex] = pval
+                        if not newFrame.ModelChanges[index] then
+                            newFrame.ModelChanges[index] = {}
+                        end
+                        newFrame.ModelChanges[index][pindex] = pval
+                    end
 				end
 				if not TableEmpty(newFrame.ModelChanges) then
 					Replay.RecordingFrame += 1
@@ -660,27 +666,30 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         
         local values: {}
         for index, clone in ipairs(Replay.AllActiveClones) do
-            if Replay.CurrentState[index]["NotDestroyed"] then
+            if Replay.CurrentState[index]["NotDestroyed"] then -- Ignore warnings here. GetType should protect from any errors
                 if f2 then
-                    local f0 = if frame > 1 then Replay.Frames[frame - 1] else f1
-                    local f3 = if frame + 2 <= #Replay.Frames then Replay.Frames[frame + 2] else f2
+                    --local f0 = if frame > 1 then Replay.Frames[frame - 1] else f1
+                    --local f3 = if frame + 2 <= #Replay.Frames then Replay.Frames[frame + 2] else f2
                     if f2.ModelChanges[index] then
                         values = {}
                         for name, value in pairs(f2.ModelChanges[index]) do
                             if Replay.CurrentState[index][name] then
                                 values[2] = Replay.CurrentState[index][name]
                                 values[3] = value
-                                values[1] = (if f0.ModelChanges[index] then f0.ModelChanges[index][name] else values[2]) or values[2]
-                                values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
+                                --values[1] = (if f0.ModelChanges[index] then f0.ModelChanges[index][name] else values[2]) or values[2]
+                                --values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
                                 if GetType(value) == "StoredCFrame" then
-                                    for index2, value2 in ipairs(values) do
+                                    for index2, value2 in pairs(values) do
                                         values[index2] = StoredCFrameToCFrame(value2)
                                     end
-                                    newStates[index][name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod) -- Ignore warnings here. GetType should protect from any errors
+                                    newStates[index][name] = values[2]:Lerp(values[3], t)
+                                    --newStates[index][name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod)
                                 elseif GetType(value) == "Color3" then
-                                    newStates[index][name] = Vector3ToColor3(InterpMethod(Color3ToVector3(values[1]), Color3ToVector3(values[2]), Color3ToVector3(values[3]), Color3ToVector3(values[4]), t, 0, 0))
+                                    newStates[index][name] = Vector3ToColor3(Lerp(nil, Color3ToVector3(values[2]), Color3ToVector3(values[3]), nil, t, 0, 0))
+                                    --newStates[index][name] = Vector3ToColor3(InterpMethod(Color3ToVector3(values[1]), Color3ToVector3(values[2]), Color3ToVector3(values[3]), Color3ToVector3(values[4]), t, 0, 0))
                                 elseif GetType(value) ~= "boolean" then
-                                    newStates[index][name] = InterpMethod(values[1], values[2], values[3], values[4], t, 0, 0)
+                                    newStates[index][name] = Lerp(nil, values[2], values[3], nil, t, 0, 0)
+                                    --newStates[index][name] = InterpMethod(values[1], values[2], values[3], values[4], t, 0, 0)
                                 end
                             end
                         end
