@@ -186,15 +186,6 @@ local function RoundColor3(c: Color3, digits: number): Color3
 	return Color3.new(RoundToPlace(c.R, digits), RoundToPlace(c.G, digits), RoundToPlace(c.B, digits))
 end
 
--- self-explanitory. got too lazy to do color3 interp
-local function Color3ToVector3(c: Color3): Vector3
-	return Vector3.new(c.R, c.G, c.B)
-end
-
-local function Vector3ToColor3(c: Vector3): Color3
-	return Color3.new(c.X, c.Y, c.Z)
-end
-
 -- Checks if two tables are shallow equal (idk)
 local function ShallowEquals(t1: {}, t2: {}): boolean
 	if #t1 ~= #t2 then return false end
@@ -317,47 +308,12 @@ end
 
 
 
+-- Interpolation
 
---   Interpolation
-
--- catmull rom interpolation for numbers and vectors
-local function CRInterp(p0: number | Vector3, p1: number | Vector3, p2: number | Vector3, p3: number | Vector3, t: number, tension: number, alpha: number)
-	local function cubic(t: number, a: number, b: number, c: number, d: number): number
-		return d + t*(c + t*(b + t*a))
-	end
-	local function tj(pi: number | Vector3, pf: number | Vector3)
-		if pi == pf then return 1 end
-		if type(pi) == "number" then
-			return pi-pf
-		elseif typeof(pi) == "Vector3" and typeof(pf) == "Vector3" then
-			return (pi-pf).Magnitude
-		end
-	end
-	local t0 = 0;
-	local t1 = t0 + tj(p0,p1)^alpha;
-	local t2 = t1 + tj(p1,p2)^alpha;
-	local t3 = t2 + tj(p2,p3)^alpha;
-	local m1 = (1.0 - tension) * (t2 - t1) * ((p1 - p0) / (t1 - t0) - (p2 - p0) / (t2 - t0) + (p2 - p1) / (t2 - t1));
-	local m2 = (1.0 - tension) * (t2 - t1) * ((p2 - p1) / (t2 - t1) - (p3 - p1) / (t3 - t1) + (p3 - p2) / (t3 - t2));
-	return cubic(t, 2*(p1 - p2) + m1 + m2, -3*(p1 - p2) - m1 - m1 - m2, m1, p1)
-end
-
--- linear interpolation method for numbers and vectors
-local function Lerp(p0: number | Vector3, p1: number | Vector3, p2: number | Vector3, p3: number | Vector3, t: number, tension: number, alpha: number)
+-- linear interpolation method for numbers
+local function Lerp(p1: number, p2: number, t: number)
 	return t * (p2 - p1) + p1 -- again, can be vector3 or number, doesnt matter which it is
 end
-
--- using interpolation on a cframe
-local function InterpolateCF(p0: CFrame, p1: CFrame, p2: CFrame, p3: CFrame, t: number, tension: number, alpha: number, func)
-	local newpv: Vector3 = func(p0.Position, p1.Position, p2.Position, p3.Position, t, tension, alpha)
-	local newlv: Vector3 = func(p0.LookVector, p1.LookVector, p2.LookVector, p3.LookVector, t, tension, alpha)
-	return CFrame.new(newpv, newpv + newlv)
-end
-
--- setting which interpolation method to use
-local InterpMethod: (number | Vector3, number | Vector3, number | Vector3, number | Vector3, number, number, number)->number? = Lerp
-
-
 
 
 -- Create a new Replay Object
@@ -665,28 +621,21 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 		for index, clone in ipairs(Replay.AllActiveClones) do
 			if Replay.CurrentState[index]["NotDestroyed"] then -- Ignore warnings here. GetType should protect from any errors
 				if f2 then
-					--local f0 = if frame > 1 then Replay.Frames[frame - 1] else f1
-					--local f3 = if frame + 2 <= #Replay.Frames then Replay.Frames[frame + 2] else f2
 					if f2.ModelChanges[index] then
 						values = {}
 						for name, value in pairs(f2.ModelChanges[index]) do
 							if Replay.CurrentState[index][name] then
-								values[2] = Replay.CurrentState[index][name]
-								values[3] = value
-								--values[1] = (if f0.ModelChanges[index] then f0.ModelChanges[index][name] else values[2]) or values[2]
-								--values[4] = (if f3.ModelChanges[index] then f3.ModelChanges[index][name] else values[3]) or values[3]
+								values[1] = Replay.CurrentState[index][name]
+								values[2] = value
 								if GetType(value) == "StoredCFrame" then
 									for index2, value2 in pairs(values) do
 										values[index2] = StoredCFrameToCFrame(value2)
 									end
-									newStates[index][name] = values[2]:Lerp(values[3], t)
-									--newStates[index][name] = InterpolateCF(values[1], values[2], values[3], values[4], t, 0, 0, InterpMethod)
-								elseif GetType(value) == "Color3" then
-									newStates[index][name] = Vector3ToColor3(Lerp(nil, Color3ToVector3(values[2]), Color3ToVector3(values[3]), nil, t, 0, 0))
-									--newStates[index][name] = Vector3ToColor3(InterpMethod(Color3ToVector3(values[1]), Color3ToVector3(values[2]), Color3ToVector3(values[3]), Color3ToVector3(values[4]), t, 0, 0))
+									newStates[index][name] = values[1]:Lerp(values[2], t)
+								elseif GetType(value) == "Color3" or GetType(value) == "Vector3" then
+									newStates[index][name] = values[1]:Lerp(values[2], t)
 								elseif GetType(value) ~= "boolean" then
-									newStates[index][name] = Lerp(nil, values[2], values[3], nil, t, 0, 0)
-									--newStates[index][name] = InterpMethod(values[1], values[2], values[3], values[4], t, 0, 0)
+									newStates[index][name] = Lerp(values[1], values[2], t)
 								end
 							end
 						end
