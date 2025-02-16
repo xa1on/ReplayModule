@@ -7,7 +7,7 @@ local DEBUG = true
 local ID_ATTRIBUTE = "ReplayID"
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+--local UserInputService = game:GetService("UserInputService")
 
 -- Module
 local m = {}
@@ -143,28 +143,6 @@ local function CFrameToStoredCFrame(cf1: CFrame): StoredCFrame
 	local temp: StoredCFrame = table.pack(cf1:GetComponents())
 	temp["__type"] = "StoredCFrame" -- Required for type detection. ignore warning
 	return temp
-end
-
--- Create instance Type with Name as a child of Parent if it doesn't already exist
-local function CreateIfNotExist(class: string, name: string, parent: Instance): Instance
-	for _, inst in ipairs(parent:GetChildren()) do
-		if inst.ClassName == class and inst.Name == name then
-			return inst
-		end
-	end
-	local temp: Instance = Instance.new(class, parent)
-	temp.Name = name
-	return temp
-end
-
--- same as above but the opposite
-local function DestroyIfExist(class: string, name: string, parent: Instance): nil
-	for _, inst in ipairs(parent:GetChildren()) do
-		if inst.ClassName == class and inst.Name == name then
-			return inst:Destroy()
-		end
-	end
-	return
 end
 
 -- round a number to a certain decimal place
@@ -733,7 +711,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 		local timescale: number = 1
 		local dragStarted: boolean = false
 		local wasPlaying: boolean = false
-		local mouse: Mouse= game:GetService("Players").LocalPlayer:GetMouse()
+		local mouse: Mouse = Players.LocalPlayer:GetMouse()
 
 		local ViewportFrame = Instance.new("ViewportFrame", parent)
 		ViewportFrame.BorderSizePixel = 0
@@ -900,13 +878,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
 			UpdateTime()
 		end))
 
-
-
-
-		Replay.Settings.ReplayLocation = WorldModel
-		if Replay.ReplayShown then
-			Replay:UpdateReplayLocation()
-		end
+		Replay:UpdateReplayLocation(WorldModel)
 		return ViewportFrame
 	end
 
