@@ -7,8 +7,8 @@ local Player = game:GetService('Players').LocalPlayer
 print("ReplayModule Loaded")
 
 if not Player.Character then
-	print("Waiting for character to load...")
-	Player.CharacterAdded:Wait()
+    print("Waiting for character to load...")
+    Player.CharacterAdded:Wait()
 end
 
 
@@ -21,20 +21,20 @@ Viewport.Size = UDim2.fromScale(0.3, 0.3)
 Viewport.Position = UDim2.fromScale(0.8, 0.5)
 
 savedReplay.RecordingStarted:Connect(function()
-	Player.PlayerGui.Info.Recording.TextTransparency = 0
+    Player.PlayerGui.Info.Recording.TextTransparency = 0
 end)
 
 savedReplay.RecordingEnded:Connect(function()
-	Player.PlayerGui.Info.Recording.TextTransparency = 1
+    Player.PlayerGui.Info.Recording.TextTransparency = 1
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.Keyboard then
-		if input.KeyCode == Enum.KeyCode.R then
-			savedReplay:StartRecording()
-		elseif input.KeyCode == Enum.KeyCode.T then
-			savedReplay:StopRecording()
-			savedReplay:ShowReplay()
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == Enum.KeyCode.R then
+            savedReplay:StartRecording()
+        elseif input.KeyCode == Enum.KeyCode.T then
+            savedReplay:StopRecording()
+            savedReplay:ShowReplay()
         end
-	end
+    end
 end)
