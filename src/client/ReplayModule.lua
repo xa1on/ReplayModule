@@ -1,20 +1,6 @@
 -- i am in typechecking purgatory.
 -- death and damnation
 
-
---[[
-    TODO:
- - weld mode (rather than saving all the cframe data for all cfarmes, save weld cframe data for parts connected to welds)
- - ignoredescendents (dont add new descendents of activemodels)
- - cache replay
- - light/gui data
- - replay compression (lzw)
- - replay serialization (base64)
- - instance serializer
- - plugin to insert replay
- - generate moon animator animation for replay
-]]--
-
 --!strict
 local DEBUG = true
 local ID_ATTRIBUTE = "ReplayID"
@@ -71,7 +57,7 @@ export type ReplayType = {
     ["Settings"]: SettingsTypeStrict, -- settings applied to the replay
     ActiveModels: {Instance}, -- all models whose properties are kept track of
     StaticModels: {Instance}, -- all models that do not move and remain static througout the replay. these models are not tracked
-    PreviousRecordedState: {Instance}, -- (DO NOT MODIFY, PRIVATE TABLE) saves the previous recorded state of each active part
+    PreviousRecordedState: {Instance}, -- saves the previous recorded state of each active part
     StaticClones: {Instance}, -- clones of all static models
     IgnoredModels: {Instance}, -- all models who are not rendered
     AllActiveParts: {Instance}, -- all objects, including activeModel children that are being kept track of
