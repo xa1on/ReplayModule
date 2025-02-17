@@ -1,6 +1,19 @@
-
 -- i am in typechecking purgatory.
 -- death and damnation
+
+
+--[[
+    TODO:
+ - weld mode (rather than saving all the cframe data for all cfarmes, save weld cframe data for parts connected to welds)
+ - ignoredescendents (dont add new descendents of activemodels)
+ - cache replay
+ - light/gui data
+ - replay compression (lzw)
+ - replay serialization (base64)
+ - instance serializer
+ - plugin to insert replay
+ - generate moon animator animation for replay
+]]--
 
 --!strict
 local DEBUG = true
