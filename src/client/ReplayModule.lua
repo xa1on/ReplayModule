@@ -58,6 +58,7 @@ export type ReplayType = {
     ["Settings"]: SettingsTypeStrict, -- settings applied to the replay
     ActiveModels: {Instance}, -- all models whose properties are kept track of
     StaticModels: {Instance}, -- all models that do not move and remain static througout the replay. these models are not tracked
+    PreviousRecordedState: {Instance}, -- (DO NOT MODIFY, PRIVATE TABLE) saves the previous recorded state of each active part
     StaticClones: {Instance}, -- clones of all static models
     IgnoredModels: {Instance}, -- all models who are not rendered
     AllActiveParts: {Instance}, -- all objects, including activeModel children that are being kept track of
@@ -86,6 +87,7 @@ export type ReplayType = {
     ReplayT: number, -- number from 0 - 1 representing the progress between the current frame and the subsequent frame
 
     -- Methods
+    RegisterActive: (ReplayType, Instance) -> number, -- registers a model as an active model
     StartRecording: (ReplayType) -> nil, -- starts recording the replay
     StopRecording: (ReplayType) -> nil, -- stops recording the replay
     UpdateReplayLocation: (ReplayType, Instance?) -> nil, -- sets the location of the replay
@@ -336,18 +338,75 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
     Replay.ReplayFrame = 0
     Replay.ReplayT = 0
 
+    -- Registers an object as an ActiveModel
+    function Replay:RegisterActive(model: Instance): number
+        Replay.ActiveModels[#Replay.ActiveModels + 1] = model
+        if not Replay.Recording then return end
+        local function Register(model: Instance): number
+            if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
+            local index: number = #Replay.AllActiveParts + 1
+            Replay.Frames[Replay.RecordingFrame].ModelChanges[index] = GetState(model, Replay.Settings.Rounding)
+            Replay.PreviousRecordedState[index] = GetState(model, Replay.Settings.Rounding) -- duplicate of previous call. need to create deep copy
+            Replay.AllActiveParts[index] = model
+            model:SetAttribute(ID_ATTRIBUTE, index)
+            if Replay.RecordingFrame ~= 1 then
+                Replay.Frames[1].ModelChanges[index] = {
+                    ["NotDestroyed"] = false
+                }
+            end
+            return index
+        end
+        local id: number = Register(model)
+        for _, inst2 in ipairs(model:GetDescendants()) do
+            Register(inst2)
+        end
+        -- clone activemodel, then assign allactiveclones and activeclones
+        model.Archivable = true
+        for _, inst2 in ipairs(model:GetDescendants()) do
+            inst2.Archivable = true
+        end
+        local clone = model:Clone()
+        if clone == nil and DEBUG then
+            error("Failed to clone: " .. model:GetFullName())
+        end
+        GhostPart(clone)
+        Replay.ActiveClones[id] = clone
+        Replay.AllActiveClones[id] = clone
+        for _, inst2 in ipairs(clone:GetDescendants()) do
+            GhostPart(inst2)
+            id = inst2:GetAttribute(ID_ATTRIBUTE)
+            if id ~= nil then
+                Replay.AllActiveClones[id] = inst2
+            end
+        end
+        table.insert(Replay["Connections"], model.DescendantAdded:Connect(function(desc)
+            if desc:GetAttribute(ID_ATTRIBUTE) then return end
+            desc.Archivable = true
+            local id = Register(desc)
+            local clone2 = desc:Clone()
+            if clone2 == nil and DEBUG then
+                error("Failed to clone: " .. desc:GetFullName())
+            end
+            GhostPart(clone2)
+            clone2.Parent = FindDescendantWhichIs(clone, desc.Parent) -- well, i mean, if a descendant was added, that means it has a parent, right? why are you giving a warning here
+            if id ~= 0 then
+                Replay.AllActiveClones[id] = clone2
+            end
+        end))
+    end
+
     -- Assuming all Replays initially contain no frames
     function Replay:StartRecording(): nil
         if Replay.Recording or Replay.Playing then return end
         if not TableEmpty(Replay.Frames) then
             Replay:Clear()
         end
+        Replay.PreviousRecordedState = {}
         Replay.Recording = true
         Replay.RecordingFrame = 1;
         local startTime: number = time()
 
         local recordFrameCounter: number = Replay.Settings.FrameFrequency -- Count before recording frame using FrameFrequency
-        local previousStates: {ModelStateType} = {} -- Contains the previous state of all active parts
         local initalFrame: FrameType = { -- Inital frame
             ["Time"] = 0,
             ModelChanges = {}
@@ -358,23 +417,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         }
 
         Replay.Frames[Replay.RecordingFrame] = initalFrame
-
-        local currentIndex = 1
-        local function Register(model:Instance): number
-            if table.find(Replay.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
-            local index: number = #Replay.AllActiveParts + 1
-            previousStates[index] = GetState(model, Replay.Settings.Rounding)
-            Replay.Frames[Replay.RecordingFrame].ModelChanges[index] = GetState(model, Replay.Settings.Rounding)
-            Replay.AllActiveParts[index] = model
-            model:SetAttribute(ID_ATTRIBUTE, index)
-            if Replay.RecordingFrame ~= 1 then
-                Replay.Frames[1].ModelChanges[index] = {
-                    ["NotDestroyed"] = false
-                }
-            end
-
-            return index
-        end
 
         -- If workspace is contained, replace active models with only children of workspace
         for _, inst in ipairs(Replay.ActiveModels) do
@@ -389,46 +431,11 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             end
         end
 
+        local newActiveModels: {Instance} = ShallowCopy(Replay.ActiveModels)
 
-        -- register all models in activemodels and all it's descendents
-        for _, inst in ipairs(Replay.ActiveModels) do
-            local id: number = Register(inst)
-            for _, inst2 in ipairs(inst:GetDescendants()) do
-                Register(inst2)
-            end
-            -- clone activemodel, then assign allactiveclones and activeclones
-            inst.Archivable = true
-            for _, inst2 in ipairs(inst:GetDescendants()) do
-                inst2.Archivable = true
-            end
-            local clone = inst:Clone()
-            if clone == nil and DEBUG then
-                error("Failed to clone: " .. inst:GetFullName())
-            end
-            GhostPart(clone)
-            Replay.ActiveClones[id] = clone
-            Replay.AllActiveClones[id] = clone
-            for _, inst2 in ipairs(clone:GetDescendants()) do
-                GhostPart(inst2)
-                id = inst2:GetAttribute(ID_ATTRIBUTE)
-                if id ~= nil then
-                    Replay.AllActiveClones[id] = inst2
-                end
-            end
-            table.insert(Replay["Connections"], inst.DescendantAdded:Connect(function(desc)
-                if desc:GetAttribute(ID_ATTRIBUTE) then return end
-                desc.Archivable = true
-                local id = Register(desc)
-                local clone2 = desc:Clone()
-                if clone2 == nil and DEBUG then
-                    error("Failed to clone: " .. desc:GetFullName())
-                end
-                GhostPart(clone2)
-                clone2.Parent = FindDescendantWhichIs(clone, desc.Parent) -- well, i mean, if a descendant was added, that means it has a parent, right? why are you giving a warning here
-                if id ~= 0 then
-                    Replay.AllActiveClones[id] = clone2
-                end
-            end))
+        Replay.ActiveModels = {}
+        for _, inst in ipairs(newActiveModels) do
+            Replay:RegisterActive(inst)
         end
 
         for _, inst in ipairs(Replay.StaticModels) do
@@ -440,7 +447,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         if DEBUG then
             print("Recording Started")
             --print(DumpTable(Replay))
-            --print(DumpTable(previousStates))
+            --print(DumpTable(Replay.PreviousRecordedState))
         end
         CustomEvents.RecordingStarted:Fire()
 
@@ -463,12 +470,12 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                 newState = GetState(inst, Replay.Settings.Rounding)
                 for pindex, pval in pairs(newState) do
                     if typeof(pval) == "table" then
-                        change = not ShallowEquals(pval, previousStates[index][pindex])
+                        change = not ShallowEquals(pval, Replay.PreviousRecordedState[index][pindex])
                     else
-                        change = previousStates[index][pindex] ~= pval
+                        change = Replay.PreviousRecordedState[index][pindex] ~= pval
                     end
                     if change then
-                        previousStates[index][pindex] = pval
+                        Replay.PreviousRecordedState[index][pindex] = pval
                         if not newFrame.ModelChanges[index] then
                             newFrame.ModelChanges[index] = {}
                         end
@@ -494,6 +501,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             end
         end
         Replay["Connections"] = {}
+        Replay.PreviousRecordedState = {}
         Replay.Recording = false
         if DEBUG then
             print("Recording Stopped")
@@ -899,6 +907,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         Replay.Frames = {}
         Replay.AllActiveParts = {}
+        Replay.PreviousRecordedState = {}
         Replay.StaticClones = {}
         Replay.ActiveClones = {}
         Replay.AllActiveClones = {}
