@@ -308,9 +308,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         ReplayEnded = Instance.new("BindableEvent"),
         ReplayFrameChanged = Instance.new("BindableEvent")
     }
-
+    
     local ViewportFrameConnections: {RBXScriptConnection} = {}
-
+    
     local Replay: ReplayType = {}  -- The functions are defined later on ignore warning
     Replay.Frames = {}
     Replay["Settings"] = NormalizeSettings(s)
@@ -338,7 +338,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
     Replay.ReplayTime = 0
     Replay.ReplayFrame = 0
     Replay.ReplayT = 0
-
+    
     -- Registers an object as an ActiveModel
     function Replay:RegisterActive(model: Instance): number
         Replay.ActiveModels[#Replay.ActiveModels + 1] = model
@@ -396,7 +396,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end))
         return id
     end
-
+    
     -- Registers an object as a StaticModel
     function Replay:RegisterStatic(model: Instance): nil
         Replay.StaticModels[#Replay.StaticModels + 1] = model
@@ -405,7 +405,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         GhostPart(clone)
         table.insert(Replay.StaticClones, clone)
     end
-
+    
     -- Assuming all Replays initially contain no frames
     function Replay:StartRecording(): nil
         if Replay.Recording or Replay.Playing then return end
@@ -416,7 +416,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         Replay.Recording = true
         Replay.RecordingFrame = 1;
         local startTime: number = time()
-
+        
         local recordFrameCounter: number = Replay.Settings.FrameFrequency -- Count before recording frame using FrameFrequency
         local initalFrame: FrameType = { -- Inital frame
             ["Time"] = 0,
@@ -428,7 +428,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         }
 
         Replay.Frames[Replay.RecordingFrame] = initalFrame
-
+        
         -- If workspace is contained, replace active models with only children of workspace
         for _, inst in ipairs(Replay.ActiveModels) do
             if inst == workspace then
@@ -441,27 +441,27 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                 break
             end
         end
-
+        
         local newActiveModels: {Instance} = ShallowCopy(Replay.ActiveModels)
         local newStaticModels: {Instance} = ShallowCopy(Replay.StaticModels)
-
+        
         Replay.ActiveModels = {}
         for _, inst in ipairs(newActiveModels) do
             Replay:RegisterActive(inst)
         end
-
+        
         Replay.StaticModels = {}
         for _, inst in ipairs(newStaticModels) do
             Replay:RegisterStatic(inst)
         end
-
+        
         if DEBUG then
             print("Recording Started")
             --print(DumpTable(Replay))
             --print(DumpTable(Replay.PreviousRecordedState))
         end
         CustomEvents.RecordingStarted:Fire()
-
+        
         --   Actual recording part
         local newState: ModelStateType -- temp table containing the state of the current part
         local change: boolean -- temp variable used to indicate whether or not a value has changed
@@ -498,11 +498,10 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                     Replay.Frames[Replay.RecordingFrame] = newFrame
                 end
             end
-
         end))
         return
     end
-
+    
     function Replay:StopRecording(): nil
         if not Replay.Recording then return end
         CustomEvents.RecordingEnded:Fire()
@@ -522,7 +521,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:UpdateReplayLocation(location: Instance?): nil
         if location then Replay.Settings.ReplayLocation = location end
         if not Replay.ReplayVisible then return end
@@ -537,13 +536,13 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:ShowReplay(override: boolean?): nil
         if not override and (Replay.Playing or Replay.Recording or Replay.ReplayVisible) then return end
         for _, inst in pairs(Replay.ActiveClones) do
             inst.Parent = Replay.Settings.ReplayLocation
         end
-
+        
         for _, inst in pairs(Replay.StaticClones) do
             inst.Parent = Replay.Settings.ReplayLocation
         end
@@ -567,7 +566,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:HideReplay(): nil
         if Replay.Playing or Replay.Recording or not Replay.ReplayVisible then return end
         for _, clone in pairs(Replay.ActiveClones) do -- ActiveClones is not continuous sometimes
@@ -583,7 +582,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:GoToFrame(frame: number, t: number, override: boolean?): nil
         if frame < 1 or frame > #Replay.Frames then error("Frame out of range. [1, " .. #Replay.Frames .. "]") end
         if not override and (Replay.Playing or Replay.Recording or not Replay.ReplayVisible or frame == Replay.ReplayFrame) then return end
@@ -613,7 +612,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             end
             newStates[index] = if Replay.CurrentState[index] then ShallowCopy(Replay.CurrentState[index]) else {}
         end
-
+        
         local values: {}
         for index, clone in ipairs(Replay.AllActiveClones) do
             if Replay.CurrentState[index]["NotDestroyed"] then -- Ignore warnings here. GetType should protect from any errors
@@ -669,7 +668,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         CustomEvents.ReplayFrameChanged:Fire()
         return
     end
-
+    
     function Replay:GoToTime(time: number, override: boolean?): nil
         local currentFrame: number = 1
         while Replay.Frames[currentFrame].Time < time and currentFrame < #Replay.Frames do
@@ -684,7 +683,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:StartReplay(timescale: number): nil
         if Replay.Playing or Replay.Recording then return end
         Replay["Connections"] = {}
@@ -713,7 +712,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end)
         return
     end
-
+    
     function Replay:StopReplay(): nil
         if not Replay.Playing then return end
         CustomEvents.ReplayEnded:Fire()
@@ -725,13 +724,12 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:CreateViewport(parent: Instance): ViewportFrame
         local timescale: number = 1
         local dragStarted: boolean = false
         local wasPlaying: boolean = false
         local mouse: Mouse = Players.LocalPlayer:GetMouse()
-
         local ViewportFrame = Instance.new("ViewportFrame", parent)
         ViewportFrame.BorderSizePixel = 0
         ViewportFrame.BackgroundColor3 = Color3.new(0)
@@ -780,7 +778,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         PlayButton.Size = UDim2.fromScale(1, 1)
         PlayButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
         PlayButton.Image = "rbxasset://textures/DeveloperFramework/MediaPlayerControls/play_button.png"
-
         table.insert(ViewportFrameConnections, PlayButton.MouseButton1Click:Connect(function()
             if Replay.Recording or #Replay.Frames < 1 then return end
             if Replay.Playing then
@@ -843,9 +840,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                 TimescaleInput.Text = tostring(timescale)
             end
         end))
-
-
-
         local Timeline = Instance.new("Frame", ViewportFrame)
         Timeline.BorderSizePixel = 0
         Timeline.AnchorPoint = Vector2.new(0.5, 1)
@@ -855,11 +849,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         local TimelineProgress = Instance.new("Frame", Timeline)
         TimelineProgress.BorderSizePixel = 0
         TimelineProgress.BackgroundColor3 = Color3.new(1, 1, 1)
-
         local function XToTime(x: number): number
             return math.min((x - Timeline.AbsolutePosition.X) / Timeline.AbsoluteSize.X, 1)
         end
-
         table.insert(ViewportFrameConnections, Timeline.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 if Replay.Recording or #Replay.Frames < 1 then return end
@@ -883,7 +875,6 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                 Replay:StartReplay(timescale)
             end
         end))
-
         local function UpdateTimeline()
             local scale: number = 1
             if #Replay.Frames > 1 then
@@ -896,11 +887,10 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             UpdateTimeline()
             UpdateTime()
         end))
-
         Replay:UpdateReplayLocation(WorldModel)
         return ViewportFrame
     end
-
+    
     function Replay:Clear(): nil
         if Replay.ReplayVisible then
             Replay:HideReplay()
@@ -934,7 +924,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
+    
     function Replay:Destroy(): nil
         Replay:Clear()
         for _, event in pairs(CustomEvents) do
@@ -950,9 +940,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
         return
     end
-
-
-
+    
     return Replay
 end
 
