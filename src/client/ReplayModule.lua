@@ -87,7 +87,8 @@ export type ReplayType = {
     ReplayT: number, -- number from 0 - 1 representing the progress between the current frame and the subsequent frame
 
     -- Methods
-    RegisterActive: (ReplayType, Instance) -> number, -- registers a model as an active model
+    RegisterActive: (ReplayType, Instance) -> number, -- registers a model as an active model, returns the id of the active model
+    RegisterStatic: (ReplayType, Instance) -> nil, -- registers a model as a static model
     StartRecording: (ReplayType) -> nil, -- starts recording the replay
     StopRecording: (ReplayType) -> nil, -- stops recording the replay
     UpdateReplayLocation: (ReplayType, Instance?) -> nil, -- sets the location of the replay
@@ -393,6 +394,16 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                 Replay.AllActiveClones[id] = clone2
             end
         end))
+        return id
+    end
+
+    -- Registers an object as a StaticModel
+    function Replay:RegisterStatic(model: Instance): nil
+        Replay.StaticModels[#Replay.StaticModels + 1] = model
+        if not Replay.Recording then return end
+        local clone = model:Clone()
+        GhostPart(clone)
+        table.insert(Replay.StaticClones, clone)
     end
 
     -- Assuming all Replays initially contain no frames
@@ -432,16 +443,16 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         end
 
         local newActiveModels: {Instance} = ShallowCopy(Replay.ActiveModels)
+        local newStaticModels: {Instance} = ShallowCopy(Replay.StaticModels)
 
         Replay.ActiveModels = {}
         for _, inst in ipairs(newActiveModels) do
             Replay:RegisterActive(inst)
         end
 
-        for _, inst in ipairs(Replay.StaticModels) do
-            local clone = inst:Clone()
-            GhostPart(clone)
-            table.insert(Replay.StaticClones, clone)
+        Replay.StaticModels = {}
+        for _, inst in ipairs(newStaticModels) do
+            Replay:RegisterStatic(inst)
         end
 
         if DEBUG then
