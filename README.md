@@ -4,8 +4,6 @@ this project is only being worked on sporadically. updates not guaranteed.
 
 ![viewport replay example](assets/viewport_replay_example.png)
 
-[![in-game example](http://img.youtube.com/vi/GnE_tFeySyw/0.jpg)](http://www.youtube.com/watch?v=GnE_tFeySyw "pf replay system")
-
 ## Features
 - highly customizable and flexible save state replay system
 - all active models are observed and recorded, even if they are generated during recording
