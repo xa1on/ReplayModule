@@ -2,8 +2,12 @@
 
 this project is only being worked on sporadically. updates not guaranteed.
 
+![viewport replay example](assets/viewport_replay_example.png)
+
+[![in-game example](http://img.youtube.com/vi/GnE_tFeySyw/0.jpg)](http://www.youtube.com/watch?v=GnE_tFeySyw "pf replay system")
+
 ## Features
-- highly customizable save state replay system
+- highly customizable and flexible save state replay system
 - all active models are observed and recorded, even if they are generated during recording
 - fast and efficient storage and replay (compared to the competition)
 - custom types and a lot of very annoying typechecking
@@ -29,3 +33,4 @@ this project is only being worked on sporadically. updates not guaranteed.
 - storing timestamp of previous change to make going back faster on non-cached replays
 - doing fps along with framefrequency (idk why you would need this but i guess it could be helpful for people who run at a higher fps?)
 - chunking/task scheduler for playback/export
+- cubic interpolation for cframes????? maybe???? constant speed or continuous speed curve to ensure consistency
