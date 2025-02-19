@@ -11,11 +11,12 @@ this project is only being worked on sporadically. updates not guaranteed.
 - smooth interpolation
 
 ## WIP
-- metatables
+- metatables to avoid creating new functions per replay created
+- doubly linked-lists for storing frames (reference to previous change frame included for each new frame) REQUIRES MAJOR OVERHAUL OF PLAYBACK AND RECORDING
 - weld mode (rather than saving all the cframe data for all cfarmes, save weld cframe data for parts connected to welds)
 - ignoredescendents (dont add new descendents of activemodels)
-- cache replay
-- light/gui data
+- cache replay (may or may not be a good idea, will see)
+- record light & particle properties
 - replay compression (lzw)
 - replay serialization (base64)
 - instance serializer
