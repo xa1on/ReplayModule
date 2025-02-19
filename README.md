@@ -1,8 +1,14 @@
-# ReplayModule
+<h1 align="center">ReplayModule</h1>
 
-this project is only being worked on sporadically. updates not guaranteed.
+<h3 align="center">this project is only being worked on sporadically. updates not guaranteed.</h3>
 
-![viewport replay example](assets/viewport_replay_example.png)
+<div align="center">
+    <img src="assets/viewport_replay_example.png" alt="viewport replay example">
+</div>
+
+<div align="center">
+	<a href="https://github.com/xa1on/ReplayModule">💾 Github</a> | <a href="https://discord.gg/ecWpzSJQg2">📩 Discord</a>
+</div>
 
 ## Features
 - highly customizable and flexible save state replay system
