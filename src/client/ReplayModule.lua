@@ -27,7 +27,7 @@ type SettingsTypeStrict = {
 local DefaultSettings: SettingsTypeStrict = {
     FrameFrequency = 1,
     ReplayLocation = workspace,
-    Rounding = 3
+    Rounding = 4
 }
 
 -- Stores Model Change Info
