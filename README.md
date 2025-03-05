@@ -13,10 +13,10 @@
 ## Features
 - highly customizable and flexible save state replay system
 - all active models are observed and recorded, even if they are generated during recording
-- fast and efficient storage and replay (compared to the competition)
-- custom types and a lot of very annoying typechecking
-- custom viewport frame creator
-- smooth interpolation
+- efficient and optimized replay storage and playback (compared to other solutions)
+- custom types and lots of typechecking
+- custom viewport frame
+- smooth linear interpolation
 
 ## WIP
 - metatables to avoid creating new functions per replay created
