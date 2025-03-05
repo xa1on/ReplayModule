@@ -27,7 +27,7 @@ type SettingsTypeStrict = {
 local DefaultSettings: SettingsTypeStrict = {
     FrameFrequency = 1,
     ReplayLocation = workspace,
-    Rounding = 4
+    Rounding = 3
 }
 
 -- Stores Model Change Info
@@ -414,7 +414,7 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         Replay.PreviousRecordedState = {}
         Replay.Recording = true
         Replay.RecordingFrame = 1;
-        local startTime: number = time()
+        local startTime: number = 0
         
         local recordFrameCounter: number = Replay.Settings.FrameFrequency -- Count before recording frame using FrameFrequency
         local initalFrame: FrameType = { -- Inital frame
@@ -464,9 +464,10 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
         --   Actual recording part
         local newState: ModelStateType -- temp table containing the state of the current part
         local change: boolean -- temp variable used to indicate whether or not a value has changed
-        table.insert(Replay["Connections"], RunService.Stepped:Connect(function()
+        table.insert(Replay["Connections"], RunService.PreAnimation:Connect(function(dt: number)
             recordFrameCounter -= 1
-            Replay.RecordingTime = time() - startTime
+            startTime += dt
+            Replay.RecordingTime = startTime
             if recordFrameCounter == 0 then
                 recordFrameCounter = Replay.Settings.FrameFrequency
             else
@@ -698,10 +699,9 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
             print("Replay Started")
         end
         CustomEvents.ReplayStarted:Fire()
-        startTime = time() - (Replay.ReplayTime / timescale)
-        local currentTime: number = 0
-        Replay["Connections"][1] = RunService.RenderStepped:Connect(function()
-            currentTime = (time() - startTime) * timescale
+        local currentTime: number = Replay.ReplayTime
+        Replay["Connections"][1] = RunService.RenderStepped:Connect(function(dt: number)
+            currentTime += dt * timescale
             if currentTime < Replay.Frames[#Replay.Frames].Time then
                 Replay:GoToTime(currentTime, true)
             else
