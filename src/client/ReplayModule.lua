@@ -493,10 +493,10 @@ function m.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instanc
                         newFrame.ModelChanges[index][pindex] = pval
                     end
                 end
-                if not TableEmpty(newFrame.ModelChanges) then
-                    Replay.RecordingFrame += 1
-                    Replay.Frames[Replay.RecordingFrame] = newFrame
-                end
+            end
+            if not TableEmpty(newFrame.ModelChanges) then
+                Replay.RecordingFrame += 1
+                Replay.Frames[Replay.RecordingFrame] = newFrame
             end
         end))
         return
