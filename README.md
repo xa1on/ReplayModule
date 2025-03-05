@@ -33,7 +33,8 @@
 - generate moon animator animation for replay
 
 ## Maybe?
-- storing timestamp of previous change to make going back faster on non-cached replays
+- utilize parent property instead of using custom IsDestroyed property
+- storing timestamp of previous change to make going back faster on non-cached replays (doubly linked-lists will solve this issue)
 - doing fps along with framefrequency (idk why you would need this but i guess it could be helpful for people who run at a higher fps?)
 - chunking/task scheduler for playback/export
 - cubic interpolation for cframes????? maybe???? constant or continuous speed curve to ensure consistency
