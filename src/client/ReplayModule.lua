@@ -39,13 +39,17 @@ export type ModelStateType = {
 -- Stores Frame Info
 export type FrameType = {
     Time: number, -- time in seconds the frame took place
-    ModelChanges: {ModelStateType} -- table containing the changes in model properties, keys representing the index the model is stored inside activeModels
+    ModelChanges: {ModelStateType}, -- table containing the changes in model properties, keys representing the index the model is stored inside activeModels
+    Next: FrameType | nil, -- next frame in the replay
+    Previous: FrameType | nil -- previous frame in replay
 }
 
 -- Stores Replays
 export type ReplayType = {
     -- Custom Properties
-    Frames: {FrameType}, -- stores all the frames in the replay
+    StartFrame: FrameType, -- starting frame of replay
+    EndFrame: FrameType, -- ending frame of replay
+    CurrentFrame: FrameType,
     Settings: SettingsTypeStrict, -- settings applied to the replay
     ActiveModels: {Instance}, -- models that user specifies to keep track of
     ActualActiveModels: {Instance}, -- above, but the actual models being kept track of
@@ -75,11 +79,10 @@ export type ReplayType = {
     Recording: boolean, -- represents whether or not the replay is recording 
     Playing: boolean, -- represents whether or not the replay is being played
     ReplayVisible: boolean, -- represents whether or not the replay is visible
-    RecordingTime: number, -- number of seconds in the recording is
-    RecordingFrame: number, -- current frame number of the recording
     ReplayTime: number, -- number of seconds in the replay is.
     ReplayFrame: number, -- current frame number of the replay
     ReplayT: number, -- number from 0 - 1 representing the progress between the current frame and the subsequent frame
+    ReplayFrameCount: number, -- number of frames in the replay
 
     -- Methods
     New: (SettingsType, {Instance}, {Instance}?, {Instance}?) -> ReplayType,
@@ -298,8 +301,10 @@ end
 -- Create a new Replay Object
 function Module.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instance}?, IgnoredModels: {Instance}?): ReplayType
     local self: ReplayType = {}  -- The functions are defined later on ignore warning
-    self.Frames = {}
     self.Settings = NormalizeSettings(s)
+    self.StartFrame = nil
+    self.EndFrame = nil
+    self.CurrentFrame = nil
     self.ActiveModels = ActiveModels
     self.ActualActiveModels = {}
     self.AllActiveParts = {}
@@ -331,11 +336,10 @@ function Module.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {In
     self.Recording = false
     self.Playing = false
     self.ReplayVisible = false
-    self.RecordingTime = 0
-    self.RecordingFrame = 0
     self.ReplayTime = 0
     self.ReplayFrame = 0
     self.ReplayT = 0
+    self.ReplayFrameCount = 0
     
     return setmetatable(self, Module)
 end
@@ -347,12 +351,12 @@ function Module:RegisterActive(model: Instance): number
     local function Register(model: Instance): number
         if table.find(self.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
         local index: number = #self.AllActiveParts + 1
-        self.Frames[self.RecordingFrame].ModelChanges[index] = GetState(model, self.Settings.Rounding)
+        self.CurrentFrame.ModelChanges[index] = GetState(model, self.Settings.Rounding)
         self.PreviousRecordedState[index] = GetState(model, self.Settings.Rounding) -- duplicate of previous call. need to create deep copy
         self.AllActiveParts[index] = model
         model:SetAttribute(ID_ATTRIBUTE, index)
-        if self.RecordingFrame ~= 1 then
-            self.Frames[1].ModelChanges[index] = {
+        if self.ReplayFrame ~= 1 then
+            self.StartFrame.ModelChanges[index] = {
                 ["NotDestroyed"] = false
             }
         end
@@ -410,25 +414,32 @@ end
 -- Assuming all Replays initially contain no frames
 function Module:StartRecording(): nil
     if self.Recording or self.Playing then return end
-    if not TableEmpty(self.Frames) then
+    if self.StartFrame then
         self:Clear()
     end
     self.PreviousRecordedState = {}
     self.Recording = true
-    self.RecordingFrame = 1;
-    local startTime: number = 0
+    self.ReplayFrame = 1;
+    self.ReplayFrameCount = 1;
+    local currentTime: number = 0
     
     local recordFrameCounter: number = self.Settings.FrameFrequency -- Count before recording frame using FrameFrequency
-    local initalFrame: FrameType = { -- Inital frame
-        Time = 0,
-        ModelChanges = {}
-    }
+    
     local newFrame: FrameType = {
         Time = 0,
-        ModelChanges = {}
+        ModelChanges = {},
+        Next = nil,
+        Previous = nil
     }
 
-    self.Frames[self.RecordingFrame] = initalFrame
+    self.StartFrame = {
+        Time = 0,
+        ModelChanges = {},
+        Next = nil,
+        Previous = nil
+    }
+    
+    self.CurrentFrame = self.StartFrame
     
     -- If workspace is contained, replace active models with only children of workspace
     for _, inst in ipairs(self.ActiveModels) do
@@ -443,6 +454,8 @@ function Module:StartRecording(): nil
         end
     end
     
+    self.ActualActiveModels = {}
+    self.ActualStaticModels = {}
     for _, inst in ipairs(self.ActiveModels) do
         self:RegisterActive(inst)
     end
@@ -463,16 +476,18 @@ function Module:StartRecording(): nil
     local change: boolean -- temp variable used to indicate whether or not a value has changed
     table.insert(self.Connections, RunService.PreAnimation:Connect(function(dt: number)
         recordFrameCounter -= 1
-        startTime += dt
-        self.RecordingTime = startTime
+        currentTime += dt
+        self.ReplayTime = currentTime
         if recordFrameCounter == 0 then
             recordFrameCounter = self.Settings.FrameFrequency
         else
             return
         end
         newFrame = {
-            Time = RoundToPlace(self.RecordingTime, self.Settings.Rounding),
-            ModelChanges = {}
+            Time = RoundToPlace(currentTime, self.Settings.Rounding),
+            ModelChanges = {},
+            Next = nil,
+            Previous = self.CurrentFrame
         }
         for index, inst in ipairs(self.AllActiveParts) do
             newState = GetState(inst, self.Settings.Rounding)
@@ -492,8 +507,11 @@ function Module:StartRecording(): nil
             end
         end
         if not TableEmpty(newFrame.ModelChanges) then
-            self.RecordingFrame += 1
-            self.Frames[self.RecordingFrame] = newFrame
+            self.ReplayFrame += 1
+            self.CurrentFrame.Next = newFrame
+            self.CurrentFrame = newFrame
+            self.EndFrame = newFrame
+            self.ReplayFrameCount += 1
         end
     end))
     return
@@ -510,9 +528,10 @@ function Module:StopRecording(): nil
     self.Connections = {}
     self.PreviousRecordedState = {}
     self.Recording = false
+    self:GoToFrame(1, 0, true)
     if DEBUG then
         print("Recording Stopped")
-        --print(DumpTable(Replay))
+        --print(DumpTable(self.StartFrame))
         --print(DumpTable(self.AllActiveParts))
         --print(DumpTable(self.AllActiveClones))
     end
@@ -545,9 +564,6 @@ function Module:ShowReplay(override: boolean?): nil
     end
     self.ReplayVisible = true
     self.CustomEvents.ReplayShown:Fire()
-    if self.ReplayFrame == 0 then
-        self:GoToFrame(1, 0)
-    end
     for _, clone in ipairs(self.AllActiveClones) do
         if clone:IsA("Camera") then
             clone.CameraType = Enum.CameraType.Scriptable
@@ -581,7 +597,7 @@ function Module:HideReplay(): nil
 end
 
 function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
-    if frame < 1 or frame > #self.Frames then error("Frame out of range. [1, " .. #self.Frames .. "]") end
+    if frame < 1 or frame > self.ReplayFrameCount then error("Frame out of range. [1, " .. self.ReplayFrameCount .. "]") end
     if not override and (self.Playing or self.Recording or not self.ReplayVisible or frame == self.ReplayFrame) then return end
     local function SetCurrentState(state: ModelStateType, index: number): nil
         if state == nil then return end
@@ -594,21 +610,32 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
         return
     end
     local startFrame: number = self.ReplayFrame
-    local f1: FrameType = self.Frames[frame]
-    local f2: FrameType = self.Frames[frame + 1]
     local newStates: {ModelStateType} = {}
     if frame < startFrame then
         self.CurrentState = {}
     end
-    if TableEmpty(self.CurrentState)  then
+    if TableEmpty(self.CurrentState) then
         startFrame = 1
+        self.CurrentFrame = self.StartFrame
+        self.ReplayFrame = 1
     end
-    for index, _ in ipairs(self.AllActiveClones) do
-        for currentFrame = startFrame, frame, 1 do
-            SetCurrentState(self.Frames[currentFrame].ModelChanges[index], index)
+    
+    for currentFrameNum = startFrame, frame, 1 do
+        for index, _ in ipairs(self.AllActiveClones) do
+            SetCurrentState(self.CurrentFrame.ModelChanges[index], index)
         end
+        if currentFrameNum ~= frame then
+            self.CurrentFrame = self.CurrentFrame.Next
+            self.ReplayFrame += 1
+        end
+    end
+    
+    for index, _ in ipairs(self.AllActiveClones) do
         newStates[index] = if self.CurrentState[index] then ShallowCopy(self.CurrentState[index]) else {}
     end
+    
+    local f1: FrameType = self.CurrentFrame
+    local f2: FrameType | nil = self.CurrentFrame.Next
     
     local values: {}
     for index, clone in ipairs(self.AllActiveClones) do
@@ -661,22 +688,23 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
         end
     end
     self.ReplayT = t
-    self.ReplayFrame = frame
     self.CustomEvents.ReplayFrameChanged:Fire()
     return
 end
 
 function Module:GoToTime(time: number, override: boolean?): nil
-    local currentFrame: number = 1
-    while self.Frames[currentFrame].Time < time and currentFrame < #self.Frames do
-        currentFrame += 1
+    local currentFrameNum: number = 1
+    local currentFrame: FrameType | nil = self.StartFrame
+    while currentFrameNum < self.ReplayFrameCount and currentFrame.Time < time do
+        currentFrameNum += 1
+        currentFrame = currentFrame.Next
     end
-    local f1: FrameType = self.Frames[currentFrame - 1]
-    local f2: FrameType = self.Frames[currentFrame]
+    local f1: FrameType = currentFrame.Previous
+    local f2: FrameType = currentFrame
     if f1 then
-        self:GoToFrame(currentFrame - 1, (time - f1.Time) / (f2.Time - f1.Time), override)
+        self:GoToFrame(currentFrameNum - 1, (time - f1.Time) / (f2.Time - f1.Time), override)
     else
-        self:GoToFrame(currentFrame, 0, override)
+        self:GoToFrame(currentFrameNum, 0, override)
     end
     return
 end
@@ -687,10 +715,11 @@ function Module:StartReplay(timescale: number): nil
     if not self.ReplayVisible then
         self:ShowReplay(true)
     end
-    if self.ReplayFrame > #self.Frames then
+    if self.ReplayFrame > self.ReplayFrameCount then
+        print(self.ReplayFrame)
+        print(self.ReplayFrameCount)
         self:GoToFrame(1, 0)
     end
-    local startTime: number
     self.Playing = true
     if DEBUG then
         print("Replay Started")
@@ -699,10 +728,10 @@ function Module:StartReplay(timescale: number): nil
     local currentTime: number = self.ReplayTime
     self.Connections[1] = RunService.RenderStepped:Connect(function(dt: number)
         currentTime += dt * timescale
-        if currentTime < self.Frames[#self.Frames].Time then
+        if currentTime < self.EndFrame.Time then
             self:GoToTime(currentTime, true)
         else
-            self:GoToFrame(#self.Frames, 0, true)
+            self:GoToFrame(self.ReplayFrameCount, 0, true)
             self:StopReplay()
         end
     end)
@@ -750,7 +779,7 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     BackButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
     BackButton.Image = "rbxasset://textures/AnimationEditor/button_control_previous.png"
     table.insert(self.ViewportFrameConnections, BackButton.MouseButton1Click:Connect(function()
-        if self.Recording or #self.Frames < 1 then return end
+        if self.Recording or self.ReplayFrameCount < 1 then return end
         self:GoToFrame(1, 0, true)
     end))
     local ForwardButton = Instance.new("ImageButton", BottomFrame)
@@ -761,11 +790,11 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     ForwardButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
     ForwardButton.Image = "rbxasset://textures/AnimationEditor/button_control_next.png"
     table.insert(self.ViewportFrameConnections, ForwardButton.MouseButton1Click:Connect(function()
-        if self.Recording or #self.Frames < 1 then return end
+        if self.Recording or self.ReplayFrameCount < 1 then return end
         if self.Playing then
             self:StopReplay()
         end
-        self:GoToFrame(#self.Frames, 0, true)
+        self:GoToFrame(self.ReplayFrameCount, 0, true)
     end))
     local PlayButton = Instance.new("ImageButton", BottomFrame)
     PlayButton.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -775,11 +804,11 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     PlayButton.SizeConstraint = Enum.SizeConstraint.RelativeYY
     PlayButton.Image = "rbxasset://textures/DeveloperFramework/MediaPlayerControls/play_button.png"
     table.insert(self.ViewportFrameConnections, PlayButton.MouseButton1Click:Connect(function()
-        if self.Recording or #self.Frames < 1 then return end
+        if self.Recording or self.ReplayFrameCount < 1 then return end
         if self.Playing then
             self:StopReplay()
         else
-            if self.ReplayFrame == #self.Frames then
+            if self.ReplayFrame == self.ReplayFrameCount then
                 self:GoToFrame(1, 0, true)
             end
             self:StartReplay(timescale)
@@ -803,10 +832,10 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     Time.TextScaled = true
     Time.TextSize = 12
     local function UpdateTime()
-        if #self.Frames < 1 then
+        if self.ReplayFrameCount < 1 then
             Time.Text = "0:00 / 0:00"
         else
-            Time.Text = ConvertTime(self.ReplayTime) .. " / " .. ConvertTime(self.Frames[#self.Frames].Time)
+            Time.Text = ConvertTime(self.ReplayTime) .. " / " .. ConvertTime(self.EndFrame.Time)
         end
     end
     UpdateTime()
@@ -850,19 +879,19 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     end
     table.insert(self.ViewportFrameConnections, Timeline.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if self.Recording or #self.Frames < 1 then return end
+            if self.Recording or self.ReplayFrameCount < 1 then return end
             wasPlaying = self.Playing
             dragStarted = true
             if wasPlaying then
                 self:StopReplay()
             end
-            self:GoToTime(self.Frames[#self.Frames].Time * XToTime(input.Position.X))
+            self:GoToTime(self.EndFrame.Time * XToTime(input.Position.X))
         end
     end))
     table.insert(self.ViewportFrameConnections, mouse.Move:Connect(function()
         if not dragStarted then return end
         local mouseX = mouse.X
-        self:GoToTime(self.Frames[#self.Frames].Time * XToTime(mouseX))
+        self:GoToTime(self.EndFrame.Time * XToTime(mouseX))
     end))
     table.insert(self.ViewportFrameConnections, mouse.Button1Up:Connect(function()
         if not dragStarted then return end
@@ -873,8 +902,8 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     end))
     local function UpdateTimeline()
         local scale: number = 1
-        if #self.Frames > 1 then
-            scale = self.ReplayTime / self.Frames[#self.Frames].Time
+        if self.ReplayFrameCount > 1 then
+            scale = self.ReplayTime / self.EndFrame.Time
         end
         TimelineProgress.Size = UDim2.fromScale(scale, 1)
     end
@@ -902,7 +931,9 @@ function Module:Clear(): nil
             connection:Disconnect()
         end
     end
-    self.Frames = {}
+    self.StartFrame = nil
+    self.EndFrame = nil
+    self.CurrentFrame = nil
     self.AllActiveParts = {}
     self.PreviousRecordedState = {}
     self.StaticClones = {}
@@ -910,11 +941,10 @@ function Module:Clear(): nil
     self.AllActiveClones = {}
     self.CurrentState = {}
     self.Connections = {}
-    self.RecordingTime = 0
-    self.RecordingFrame = 0
     self.ReplayTime = 0
     self.ReplayFrame = 0
     self.ReplayT = 0
+    self.ReplayFrameCount = 0
     if DEBUG then
         print("Recording Cleared")
     end
