@@ -8,10 +8,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 --local UserInputService = game:GetService("UserInputService")
 
--- Module
-local Module = {}
-Module.__index = Module
-
 --   Types
 type StoredCFrame = {number} -- also stores type in __type = "StoredCFrame"
 
@@ -51,8 +47,10 @@ export type ReplayType = {
     -- Custom Properties
     Frames: {FrameType}, -- stores all the frames in the replay
     Settings: SettingsTypeStrict, -- settings applied to the replay
-    ActiveModels: {Instance}, -- all models whose properties are kept track of
-    StaticModels: {Instance}, -- all models that do not move and remain static througout the replay. these models are not tracked
+    ActiveModels: {Instance}, -- models that user specifies to keep track of
+    ActualActiveModels: {Instance}, -- above, but the actual models being kept track of
+    StaticModels: {Instance}, -- models that user specifies to not move and remain static througout the replay. these models are not tracked
+    ActualStaticModels: {Instance}, -- above, but the actual static models
     PreviousRecordedState: {Instance}, -- saves the previous recorded state of each active part
     StaticClones: {Instance}, -- clones of all static models
     IgnoredModels: {Instance}, -- all models who are not rendered
@@ -84,6 +82,7 @@ export type ReplayType = {
     ReplayT: number, -- number from 0 - 1 representing the progress between the current frame and the subsequent frame
 
     -- Methods
+    New: (SettingsType, {Instance}, {Instance}?, {Instance}?) -> ReplayType,
     RegisterActive: (ReplayType, Instance) -> number, -- registers a model as an active model, returns the id of the active model
     RegisterStatic: (ReplayType, Instance) -> nil, -- registers a model as a static model
     StartRecording: (ReplayType) -> nil, -- starts recording the replay
@@ -100,7 +99,9 @@ export type ReplayType = {
     Destroy: (ReplayType) -> nil -- destroys the replay. the whole replay will be cleared
 }
 
-
+-- Module
+local Module: ReplayType = {} -- The functions are defined later on ignore warning
+Module.__index = Module
 
 
 
@@ -296,13 +297,14 @@ end
 
 -- Create a new Replay Object
 function Module.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {Instance}?, IgnoredModels: {Instance}?): ReplayType
-    
     local self: ReplayType = {}  -- The functions are defined later on ignore warning
     self.Frames = {}
     self.Settings = NormalizeSettings(s)
     self.ActiveModels = ActiveModels
+    self.ActualActiveModels = {}
     self.AllActiveParts = {}
     self.StaticModels = StaticModels or {}
+    self.ActualStaticModels = {}
     self.StaticClones = {}
     self.IgnoredModels = IgnoredModels or {}
     self.ActiveClones = {}
@@ -335,14 +337,12 @@ function Module.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {In
     self.ReplayFrame = 0
     self.ReplayT = 0
     
-    
-    
     return setmetatable(self, Module)
 end
 
 -- Registers an object as an ActiveModel
 function Module:RegisterActive(model: Instance): number
-    self.ActiveModels[#self.ActiveModels + 1] = model
+    self.ActualActiveModels[#self.ActualActiveModels + 1] = model
     if not self.Recording then return end
     local function Register(model: Instance): number
         if table.find(self.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
@@ -400,7 +400,7 @@ end
 
 -- Registers an object as a StaticModel
 function Module:RegisterStatic(model: Instance): nil
-    self.StaticModels[#self.StaticModels + 1] = model
+    self.ActualStaticModels[#self.ActualStaticModels + 1] = model
     if not self.Recording then return end
     local clone = model:Clone()
     GhostPart(clone)
@@ -443,16 +443,11 @@ function Module:StartRecording(): nil
         end
     end
     
-    local newActiveModels: {Instance} = ShallowCopy(self.ActiveModels)
-    local newStaticModels: {Instance} = ShallowCopy(self.StaticModels)
-    
-    self.ActiveModels = {}
-    for _, inst in ipairs(newActiveModels) do
+    for _, inst in ipairs(self.ActiveModels) do
         self:RegisterActive(inst)
     end
     
-    self.StaticModels = {}
-    for _, inst in ipairs(newStaticModels) do
+    for _, inst in ipairs(self.StaticModels) do
         self:RegisterStatic(inst)
     end
     
