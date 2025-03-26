@@ -20,6 +20,8 @@ Viewport.AnchorPoint = Vector2.new(0.5, 0.5)
 Viewport.Size = UDim2.fromScale(0.3, 0.3)
 Viewport.Position = UDim2.fromScale(0.8, 0.5)
 
+local fullscreen = false
+
 savedReplay.RecordingStarted:Connect(function()
     Player.PlayerGui.Info.Recording.TextTransparency = 0
 end)
@@ -35,6 +37,15 @@ UserInputService.InputEnded:Connect(function(input)
         elseif input.KeyCode == Enum.KeyCode.T then
             savedReplay:StopRecording()
             savedReplay:ShowReplay()
+        elseif input.KeyCode == Enum.KeyCode.F then
+            fullscreen = not fullscreen
+            if fullscreen then
+                Viewport.Size = UDim2.fromScale(0.9, 0.9)
+                Viewport.Position = UDim2.fromScale(0.5, 0.5)
+            else
+                Viewport.Size = UDim2.fromScale(0.3, 0.3)
+                Viewport.Position = UDim2.fromScale(0.8, 0.5)
+            end
         end
     end
 end)
