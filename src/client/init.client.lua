@@ -49,3 +49,9 @@ UserInputService.InputEnded:Connect(function(input)
         end
     end
 end)
+
+game:GetService("RunService").Stepped:Connect(function()
+    if savedReplay and savedReplay.Recording then
+        Player.PlayerGui.Info.FrameNum.Text = savedReplay.ReplayFrame
+    end
+end)

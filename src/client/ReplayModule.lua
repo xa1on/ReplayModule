@@ -894,6 +894,18 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
             self:GoToTime(self.EndFrame.Time * XToTime(input.Position.X))
         end
     end))
+    local FrameNumCounter = Instance.new("TextLabel", ViewportFrame)
+    FrameNumCounter.BorderSizePixel = 0
+    FrameNumCounter.BackgroundTransparency = 1
+    FrameNumCounter.Position = UDim2.fromScale(0.02, 0.02)
+    FrameNumCounter.Size = UDim2.fromScale(0.05, 0.05)
+    FrameNumCounter.SizeConstraint = Enum.SizeConstraint.RelativeYY
+    FrameNumCounter.FontFace = Font.fromName("SourceSansPro", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    FrameNumCounter.TextColor3 = Color3.new(1, 1, 1)
+    FrameNumCounter.TextTransparency = 0.5
+    FrameNumCounter.TextScaled = true
+    FrameNumCounter.TextSize = 12
+    FrameNumCounter.Text = self.ReplayFrame
     table.insert(self.ViewportFrameConnections, mouse.Move:Connect(function()
         if not dragStarted then return end
         local mouseX = mouse.X
@@ -917,6 +929,7 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     table.insert(self.ViewportFrameConnections, self.ReplayFrameChanged:Connect(function()
         UpdateTimeline()
         UpdateTime()
+        FrameNumCounter.Text = self.ReplayFrame
     end))
     self:UpdateReplayLocation(WorldModel)
     return ViewportFrame
