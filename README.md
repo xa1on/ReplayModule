@@ -37,3 +37,4 @@
 - doing fps along with framefrequency (idk why you would need this but i guess it could be helpful for people who run at a higher fps?)
 - chunking/task scheduler for playback/export
 - cubic interpolation for cframes????? maybe???? constant or continuous speed curve to ensure consistency
+- use reference of previous change to improve performance while going back. (maybe revisit if performance in this respect becomes more of an issue)

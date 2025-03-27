@@ -615,7 +615,7 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     end
     local startFrame: number = self.ReplayFrame
     local newStates: {ModelStateType} = {}
-    if frame < startFrame then
+    if frame < startFrame then -- fully aware this is not optimal. would be a lot of work to get it to work.
         self.CurrentState = {}
     end
     if TableEmpty(self.CurrentState) then
