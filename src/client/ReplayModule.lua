@@ -474,9 +474,13 @@ function Module:StartRecording(): nil
     --   Actual recording part
     local newState: ModelStateType -- temp table containing the state of the current part
     local change: boolean -- temp variable used to indicate whether or not a value has changed
-    table.insert(self.Connections, RunService.PreAnimation:Connect(function(dt: number)
+    local previousClock: number = os.clock()
+    local currentClock: number
+    table.insert(self.Connections, RunService.PreAnimation:Connect(function()
         recordFrameCounter -= 1
-        currentTime += dt
+        currentClock = os.clock()
+        currentTime += currentClock - previousClock
+        previousClock = currentClock
         self.ReplayTime = currentTime
         if recordFrameCounter == 0 then
             recordFrameCounter = self.Settings.FrameFrequency
@@ -693,8 +697,12 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
 end
 
 function Module:GoToTime(time: number, override: boolean?): nil
-    local currentFrameNum: number = 1
-    local currentFrame: FrameType | nil = self.StartFrame
+    local currentFrameNum: number = self.ReplayFrame
+    local currentFrame: FrameType | nil = self.CurrentFrame
+    if self.ReplayTime > time then
+        currentFrameNum = 1
+        currentFrame = self.StartFrame
+    end
     while currentFrameNum < self.ReplayFrameCount and currentFrame.Time < time do
         currentFrameNum += 1
         currentFrame = currentFrame.Next
@@ -716,8 +724,6 @@ function Module:StartReplay(timescale: number): nil
         self:ShowReplay(true)
     end
     if self.ReplayFrame > self.ReplayFrameCount then
-        print(self.ReplayFrame)
-        print(self.ReplayFrameCount)
         self:GoToFrame(1, 0)
     end
     self.Playing = true
