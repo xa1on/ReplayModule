@@ -19,7 +19,6 @@
 - smooth linear interpolation
 
 ## WIP
-- doubly linked-lists for storing frames (reference to previous change frame included for each new frame) REQUIRES MAJOR OVERHAUL OF PLAYBACK AND RECORDING
 - ignoredescendents (dont add new descendents of activemodels)
 - weld mode (rather than saving all the cframe data for all cframes, save weld data for parts connected to welds)
 - record light & particle properties
