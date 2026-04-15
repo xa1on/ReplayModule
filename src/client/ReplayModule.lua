@@ -8,6 +8,20 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 --local UserInputService = game:GetService("UserInputService")
 
+--   Numeric Mapping Constants
+local P_CFRAME = 1
+local P_TRANSPARENCY = 2
+local P_COLOR = 3
+local P_NOT_DESTROYED = 4
+local P_FIELD_OF_VIEW = 5
+
+local PROPERTY_MAP: {string} = {
+    [P_CFRAME] = "CFrame",
+    [P_TRANSPARENCY] = "Transparency",
+    [P_COLOR] = "Color",
+    [P_NOT_DESTROYED] = "NotDestroyed",
+    [P_FIELD_OF_VIEW] = "FieldOfView",
+}
 --   Types
 type SettingsType = {
     FrameFrequency: number?, -- store a single frame for every n frames rendered
@@ -27,17 +41,13 @@ local DefaultSettings: SettingsTypeStrict = {
 
 -- Stores Model Change Info
 export type ModelStateType = {
-    ["CFrame"]: CFrame?,
-    ["Transparency"]: number?,
-    ["Color"]: Color3?,
-    ["NotDestroyed"]: boolean?,
-    ["FieldOfView"]: number?
+    [number]: any -- Use constants P_CFRAME, etc.
 }
 
 -- Stores Frame Info
 export type FrameType = {
     Time: number, -- time in seconds the frame took place
-    ModelChanges: {ModelStateType}, -- table containing the changes in model properties, keys representing the index the model is stored inside activeModels
+    ModelChanges: {any}, -- flat array: {PartIndex, PropertyIndex, Value, ...}
     Next: FrameType | nil, -- next frame in the replay
     Previous: FrameType | nil -- previous frame in replay
 }
@@ -53,7 +63,7 @@ export type ReplayType = {
     ActualActiveModels: {Instance}, -- above, but the actual models being kept track of
     StaticModels: {Instance}, -- models that user specifies to not move and remain static througout the replay. these models are not tracked
     ActualStaticModels: {Instance}, -- above, but the actual static models
-    PreviousRecordedState: {Instance}, -- saves the previous recorded state of each active part
+    PreviousRecordedState: {ModelStateType}, -- saves the previous recorded state of each active part
     StaticClones: {Instance}, -- clones of all static models
     IgnoredModels: {Instance}, -- all models who are not rendered
     AllActiveParts: {Instance}, -- all objects, including activeModel children that are being kept track of
@@ -84,6 +94,7 @@ export type ReplayType = {
 
     -- Methods
     New: (SettingsType, {Instance}, {Instance}?, {Instance}?) -> ReplayType,
+    RegisterChange: (ReplayType, number, number, any) -> nil, -- registers a model change to the current frame
     RegisterActive: (ReplayType, Instance) -> number, -- registers a model as an active model, returns the id of the active model
     RegisterStatic: (ReplayType, Instance) -> nil, -- registers a model as a static model
     StartRecording: (ReplayType) -> nil, -- starts recording the replay
@@ -109,7 +120,7 @@ Module.__index = Module
 --   Helper Functions
 
 -- Checks if table is empty
-local function TableEmpty(t1: {}): boolean
+local function TableEmpty(t1: {any}): boolean
     local next = next
     if next(t1) == nil then
         return true
@@ -118,8 +129,8 @@ local function TableEmpty(t1: {}): boolean
 end
 
 -- Dumps deep table data into a string
-local function DumpTable(t1: {}): string
-    local function Helper(t1: {}, step: number): string
+local function DumpTable(t1: {any}): string
+    local function Helper(t1: {any}, step: number): string
         step = step or 1
         if type(t1) == "table" then
             if TableEmpty(t1) then return "{}" end
@@ -157,7 +168,7 @@ local function RoundColor3(c: Color3, digits: number): Color3
 end
 
 -- Checks if two tables are shallow equal (idk)
-local function ShallowEquals(t1: {}, t2: {}): boolean
+local function ShallowEquals(t1: {any}, t2: {any}): boolean
     if #t1 ~= #t2 then return false end
     for index, inst in pairs(t1) do
         if t2[index] ~= inst then
@@ -168,8 +179,8 @@ local function ShallowEquals(t1: {}, t2: {}): boolean
 end
 
 -- Creates a shallow copy of tables
-local function ShallowCopy(original: {}): {}
-    local new: {} = {}
+local function ShallowCopy(original: {any}): {any}
+    local new: {any} = {}
     for index, inst in pairs(original) do
         new[index] = inst
     end
@@ -178,7 +189,7 @@ end
 
 -- Check if two instances are identical-ish
 local function InstanceIdentical(inst1: Instance, inst2: Instance): boolean
-    local id = inst1:GetAttribute(ID_ATTRIBUTE)
+    local id: any = inst1:GetAttribute(ID_ATTRIBUTE)
     return inst1.Name == inst2.Name and inst1.ClassName == inst2.ClassName and (not id or (id == inst2:GetAttribute(ID_ATTRIBUTE))) --[[ and (not inst1:IsA("BasePart") or (inst1.CFrame == inst2.CFrame and inst1.Size == inst2.Size))]]
 end
 
@@ -237,15 +248,15 @@ end
 -- Gets the state of an instance
 local function GetState(inst: Instance, rounding: number): ModelStateType
     local state: ModelStateType = {
-        ["NotDestroyed"] = inst:IsDescendantOf(game)
+        [P_NOT_DESTROYED] = inst:IsDescendantOf(game)
     }
     if inst:IsA("BasePart") then
-        state["CFrame"] = RoundCFrame(inst.CFrame, rounding)
-        state["Color"] = RoundColor3(inst.Color, rounding)
-        state["Transparency"] = RoundToPlace(1 - ((1 - inst.Transparency) * (1 - inst.LocalTransparencyModifier)), rounding)
+        state[P_CFRAME] = RoundCFrame(inst.CFrame, rounding)
+        state[P_COLOR] = RoundColor3(inst.Color, rounding)
+        state[P_TRANSPARENCY] = RoundToPlace(1 - ((1 - inst.Transparency) * (1 - inst.LocalTransparencyModifier)), rounding)
     elseif inst:IsA("Camera") then
-        state["CFrame"] = RoundCFrame(inst.CFrame, rounding)
-        state["FieldOfView"] = RoundToPlace(inst.FieldOfView, rounding)
+        state[P_CFRAME] = RoundCFrame(inst.CFrame, rounding)
+        state[P_FIELD_OF_VIEW] = RoundToPlace(inst.FieldOfView, rounding)
     end
     return state
 end
@@ -332,6 +343,12 @@ function Module.New(s: SettingsType, ActiveModels: {Instance}, StaticModels: {In
     return setmetatable(self, Module)
 end
 
+function Module:RegisterChange(index: number, pindex: number, pval: any): nil
+    table.insert(self.CurrentFrame.ModelChanges, index)
+    table.insert(self.CurrentFrame.ModelChanges, pindex)
+    table.insert(self.CurrentFrame.ModelChanges, pval)
+end
+
 -- Registers an object as an ActiveModel
 function Module:RegisterActive(model: Instance): number
     self.ActualActiveModels[#self.ActualActiveModels + 1] = model
@@ -339,14 +356,15 @@ function Module:RegisterActive(model: Instance): number
     local function Register(model: Instance): number
         if table.find(self.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
         local index: number = #self.AllActiveParts + 1
-        self.CurrentFrame.ModelChanges[index] = GetState(model, self.Settings.Rounding)
-        self.PreviousRecordedState[index] = GetState(model, self.Settings.Rounding) -- duplicate of previous call. need to create deep copy
+        local state = GetState(model, self.Settings.Rounding)
+        for pindex, pval in pairs(state) do
+            self:RegisterChange(index, pindex, pval)
+        end
+        self.PreviousRecordedState[index] = state
         self.AllActiveParts[index] = model
         model:SetAttribute(ID_ATTRIBUTE, index)
         if self.ReplayFrame ~= 1 then
-            self.StartFrame.ModelChanges[index] = {
-                ["NotDestroyed"] = false
-            }
+            self:RegisterChange(index, P_NOT_DESTROYED, false)
         end
         return index
     end
@@ -491,10 +509,7 @@ function Module:StartRecording(): nil
                 end
                 if change then
                     self.PreviousRecordedState[index][pindex] = pval
-                    if not newFrame.ModelChanges[index] then
-                        newFrame.ModelChanges[index] = {}
-                    end
-                    newFrame.ModelChanges[index][pindex] = pval
+                    self:RegisterChange(index, pindex, pval)
                 end
             end
         end
@@ -591,16 +606,18 @@ end
 function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     if frame < 1 or frame > self.ReplayFrameCount then error("Frame out of range. [1, " .. self.ReplayFrameCount .. "]") end
     if not override and (self.Playing or self.Recording or not self.ReplayVisible or frame == self.ReplayFrame) then return end
-    local function SetCurrentState(state: ModelStateType, index: number): nil
-        if state == nil then return end
-        if not self.CurrentState[index] then self.CurrentState[index] = {} end
-        for name, value in pairs(state) do
-            if value ~= nil then
-                self.CurrentState[index][name] = value
-            end
+    
+    local function ApplyFlatChanges(changes: {any})
+        for i: number = 1, #changes, 3 do
+            local index: number = changes[i]
+            local pindex: number = changes[i+1]
+            local value: any = changes[i+2]
+            
+            if not self.CurrentState[index] then self.CurrentState[index] = {} end
+            self.CurrentState[index][pindex] = value
         end
-        return
     end
+
     local startFrame: number = self.ReplayFrame
     local newStates: {ModelStateType} = {}
     if frame < startFrame then -- fully aware this is not optimal. would be a lot of work to get it to work.
@@ -613,9 +630,7 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     end
     
     for currentFrameNum = startFrame, frame, 1 do
-        for index, _ in ipairs(self.AllActiveClones) do
-            SetCurrentState(self.CurrentFrame.ModelChanges[index], index)
-        end
+        ApplyFlatChanges(self.CurrentFrame.ModelChanges)
         if currentFrameNum ~= frame then
             self.CurrentFrame = self.CurrentFrame.Next
             self.ReplayFrame += 1
@@ -630,32 +645,37 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     local f2: FrameType | nil = self.CurrentFrame.Next
     
     local epsilon: number = 10 ^ -self.Settings.Rounding
-    local values: {}
-    for index, clone in ipairs(self.AllActiveClones) do
-        if self.CurrentState[index]["NotDestroyed"] then -- Ignore warnings here. GetType should protect from any errors
-            if f2 then
-                if f2.ModelChanges[index] then
-                    values = {}
-                    for name, value in pairs(f2.ModelChanges[index]) do
-                        if self.CurrentState[index][name] then
-                            values[1] = self.CurrentState[index][name]
-                            values[2] = value
-                            if typeof(value) == "CFrame" or typeof(value) == "Color3" or typeof(value) == "Vector3" then
-                                newStates[index][name] = values[1]:Lerp(values[2], t)
-                            elseif typeof(value) ~= "boolean" then
-                                newStates[index][name] = Lerp(values[1], values[2], t)
-                            end
-                        end
-                    end
+    
+    -- Interpolation logic
+    if f2 and t > 0 then
+        local f2Changes = f2.ModelChanges
+        for i: number = 1, #f2Changes, 3 do
+            local index: number = f2Changes[i]
+            local pindex: number = f2Changes[i+1]
+            local value: any = f2Changes[i+2]
+            
+            if self.CurrentState[index] and self.CurrentState[index][pindex] then
+                local v1: any = self.CurrentState[index][pindex]
+                local v2: any = value
+                
+                if typeof(v2) == "CFrame" or typeof(v2) == "Color3" or typeof(v2) == "Vector3" then
+                    newStates[index][pindex] = v1:Lerp(v2, t)
+                elseif typeof(v2) ~= "boolean" then
+                    newStates[index][pindex] = Lerp(v1, v2, t)
                 end
-                self.ReplayTime = t * (f2.Time - f1.Time) + f1.Time
-            else
-                t = 0
-                self.ReplayTime = f1.Time
             end
         end
-        for name, value in pairs(newStates[index]) do
-            if name == "NotDestroyed" then
+        self.ReplayTime = t * (f2.Time - f1.Time) + f1.Time
+    else
+        self.ReplayTime = f1.Time
+    end
+
+    for index, clone in ipairs(self.AllActiveClones) do
+        local state = newStates[index]
+        if not state or not state[P_NOT_DESTROYED] then continue end
+
+        for pindex, value in pairs(state) do
+            if pindex == P_NOT_DESTROYED then
                 if value then
                     if not clone:IsDescendantOf(game) then
                         clone.Parent = self.Settings.ReplayLocation
@@ -664,18 +684,21 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
                     if clone.Transparency ~= 1 then
                         clone.Transparency = 1
                     end
-                    newStates[index].Transparency = nil
+                    newStates[index][P_TRANSPARENCY] = nil
                 end
-            elseif name == "CFrame" then
+            elseif pindex == P_CFRAME then
                 if not (clone :: BasePart).CFrame:FuzzyEq(value, epsilon) then
                     (clone :: BasePart).CFrame = value
                 end
-            elseif typeof(value) == "number" then
-                if math.abs(clone[name] - value) > epsilon then
+            else
+                local name = PROPERTY_MAP[pindex]
+                if typeof(value) == "number" then
+                    if math.abs(clone[name] - value) > epsilon then
+                        clone[name] = value
+                    end
+                elseif clone[name] ~= value then
                     clone[name] = value
                 end
-            elseif clone[name] ~= value then
-                clone[name] = value
             end
         end
     end
@@ -698,8 +721,8 @@ function Module:GoToTime(time: number, override: boolean?): nil
     local f1: FrameType = currentFrame.Previous
     local f2: FrameType = currentFrame
     if f1 then
-        local gap = f2.Time - f1.Time
-        local t
+        local gap: number = f2.Time - f1.Time
+        local t: number
         if gap > 0.1 then
             local moveStartTime = f2.Time - 0.1
             if time < moveStartTime then
@@ -908,7 +931,7 @@ function Module:CreateViewport(parent: Instance): ViewportFrame
     FrameNumCounter.Text = self.ReplayFrame
     table.insert(self.ViewportFrameConnections, mouse.Move:Connect(function()
         if not dragStarted then return end
-        local mouseX = mouse.X
+        local mouseX: number = mouse.X
         self:GoToTime(self.EndFrame.Time * XToTime(mouseX))
     end))
     table.insert(self.ViewportFrameConnections, mouse.Button1Up:Connect(function()
