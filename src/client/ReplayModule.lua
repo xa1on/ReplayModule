@@ -9,8 +9,6 @@ local RunService = game:GetService("RunService")
 --local UserInputService = game:GetService("UserInputService")
 
 --   Types
-type StoredCFrame = {number} -- also stores type in __type = "StoredCFrame"
-
 type SettingsType = {
     FrameFrequency: number?, -- store a single frame for every n frames rendered
     ReplayLocation: Instance?, -- where the replay folder is stored under (the replay folder is what stores the models that are being replayed)
@@ -29,7 +27,7 @@ local DefaultSettings: SettingsTypeStrict = {
 
 -- Stores Model Change Info
 export type ModelStateType = {
-    ["CFrame"]: StoredCFrame?,
+    ["CFrame"]: CFrame?,
     ["Transparency"]: number?,
     ["Color"]: Color3?,
     ["NotDestroyed"]: boolean?,
@@ -137,30 +135,20 @@ local function DumpTable(t1: {}): string
     return Helper(t1, 1)
 end
 
--- Converts a StoredCFrame to a CFrame
-local function StoredCFrameToCFrame(cf1: StoredCFrame): CFrame
-    return CFrame.new(table.unpack(cf1))
-end
-
--- Converts a CFrame to a StoredCFrame
-local function CFrameToStoredCFrame(cf1: CFrame): StoredCFrame
-    local temp: StoredCFrame = table.pack(cf1:GetComponents())
-    temp.__type = "StoredCFrame" -- Required for type detection. ignore warning
-    return temp
-end
-
 -- round a number to a certain decimal place
 local function RoundToPlace(num: number, digits: number): number
     return math.round(num * (10 ^ digits)) / (10 ^ digits)
 end
 
 -- same as above but for cframes
-local function RoundCFrame(cf: CFrame, digits: number): StoredCFrame
-    local cframeTable: StoredCFrame = CFrameToStoredCFrame(cf)
-    for index, value in ipairs(cframeTable) do
-        cframeTable[index] = RoundToPlace(value, digits) -- cframes only contain numbers for the indexed part of the table. ignore warning
-    end
-    return cframeTable
+local function RoundCFrame(cf: CFrame, digits: number): CFrame
+    local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+    return CFrame.new(
+        RoundToPlace(x, digits), RoundToPlace(y, digits), RoundToPlace(z, digits),
+        RoundToPlace(r00, digits), RoundToPlace(r01, digits), RoundToPlace(r02, digits),
+        RoundToPlace(r10, digits), RoundToPlace(r11, digits), RoundToPlace(r12, digits),
+        RoundToPlace(r20, digits), RoundToPlace(r21, digits), RoundToPlace(r22, digits)
+    )
 end
 
 -- same but color3
@@ -641,6 +629,7 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     local f1: FrameType = self.CurrentFrame
     local f2: FrameType | nil = self.CurrentFrame.Next
     
+    local epsilon: number = 10 ^ -self.Settings.Rounding
     local values: {}
     for index, clone in ipairs(self.AllActiveClones) do
         if self.CurrentState[index]["NotDestroyed"] then -- Ignore warnings here. GetType should protect from any errors
@@ -651,14 +640,9 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
                         if self.CurrentState[index][name] then
                             values[1] = self.CurrentState[index][name]
                             values[2] = value
-                            if GetType(value) == "StoredCFrame" then
-                                for index2, value2 in pairs(values) do
-                                    values[index2] = StoredCFrameToCFrame(value2)
-                                end
+                            if typeof(value) == "CFrame" or typeof(value) == "Color3" or typeof(value) == "Vector3" then
                                 newStates[index][name] = values[1]:Lerp(values[2], t)
-                            elseif GetType(value) == "Color3" or GetType(value) == "Vector3" then
-                                newStates[index][name] = values[1]:Lerp(values[2], t)
-                            elseif GetType(value) ~= "boolean" then
+                            elseif typeof(value) ~= "boolean" then
                                 newStates[index][name] = Lerp(values[1], values[2], t)
                             end
                         end
@@ -682,12 +666,16 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
                     end
                     newStates[index].Transparency = nil
                 end
-            elseif GetType(value) == "StoredCFrame" then
-                if not ShallowEquals(RoundCFrame(clone[name], self.Settings.Rounding), value) then
-                    clone[name] = StoredCFrameToCFrame(value) -- Ignore warnings here. GetType should protect from any errors
+            elseif name == "CFrame" then
+                if not (clone :: BasePart).CFrame:FuzzyEq(value, epsilon) then
+                    (clone :: BasePart).CFrame = value
+                end
+            elseif typeof(value) == "number" then
+                if math.abs(clone[name] - value) > epsilon then
+                    clone[name] = value
                 end
             elseif clone[name] ~= value then
-                clone[name] = value -- same w/ here
+                clone[name] = value
             end
         end
     end
