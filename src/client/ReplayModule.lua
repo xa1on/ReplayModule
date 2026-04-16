@@ -722,18 +722,14 @@ function Module:GoToTime(time: number, override: boolean?): nil
     local f2: FrameType = currentFrame
     if f1 then
         local gap: number = f2.Time - f1.Time
-        local t: number
-        if gap > 0.1 then
-            local moveStartTime = f2.Time - 0.1
-            if time < moveStartTime then
-                t = 0
-            else
-                t = (time - moveStartTime) / 0.1
-            end
+        if gap > 0 then
+            local prevGap: number = if f1.Previous then f1.Time - f1.Previous.Time else gap
+            local window: number = math.min(gap, prevGap)
+            local t: number = math.clamp((time - (f2.Time - window)) / window, 0, 1)
+            self:GoToFrame(currentFrameNum - 1, t, override)
         else
-            t = (time - f1.Time) / gap
+            self:GoToFrame(currentFrameNum, 0, override)
         end
-        self:GoToFrame(currentFrameNum - 1, t, override)
     else
         self:GoToFrame(currentFrameNum, 0, override)
     end
