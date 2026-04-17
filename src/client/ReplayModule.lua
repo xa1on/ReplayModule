@@ -347,8 +347,11 @@ end
 
 -- Registers an object as an ActiveModel
 function Module:RegisterActive(model: Instance): number
+    if not self.Recording then
+        self.ActiveModels[#self.ActiveModels+1] = model
+        return
+    end
     self.ActualActiveModels[#self.ActualActiveModels + 1] = model
-    if not self.Recording then return end
     local function Register(model: Instance): number
         if table.find(self.IgnoredModels, model) or model:IsA("Status") or not (model:IsA("BasePart") or model:IsA("Model") or model:IsA("Camera")) then return 0 end
         local index: number = #self.AllActiveParts + 1
