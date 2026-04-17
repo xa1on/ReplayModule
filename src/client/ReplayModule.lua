@@ -132,7 +132,7 @@ local function DumpTable(t1: {any}): string
             if TableEmpty(t1) then return "{}" end
             local result: string = "{\n" .. string.rep(":", step)
             for i, v in pairs(t1) do
-                result = result .. tostring(i) .." = " .. Helper(v, step+1) .. ","
+                result = result .. tostring(i) .." = " .. Helper(v, step + 1) .. ","
             end
             return result .. "\n".. string.rep(":", step-1) .. "}"
         else
@@ -348,7 +348,7 @@ end
 -- Registers an object as an ActiveModel
 function Module:RegisterActive(model: Instance): number
     if not self.Recording then
-        self.ActiveModels[#self.ActiveModels+1] = model
+        self.ActiveModels[#self.ActiveModels + 1] = model
         return
     end
     self.ActualActiveModels[#self.ActualActiveModels + 1] = model
@@ -410,7 +410,7 @@ end
 -- Registers an object as a StaticModel
 function Module:RegisterStatic(model: Instance): nil
     if not self.Recording then
-        self.StaticModels[#self.StaticModels+1] = model
+        self.StaticModels[#self.StaticModels + 1] = model
         return
     end
     self.ActualStaticModels[#self.ActualStaticModels + 1] = model
@@ -604,8 +604,8 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
     local function ApplyFlatChanges(changes: {any})
         for i: number = 1, #changes, 3 do
             local index: number = changes[i]
-            local pindex: number = changes[i+1]
-            local value: any = changes[i+2]
+            local pindex: number = changes[i + 1]
+            local value: any = changes[i + 2]
             
             if not self.CurrentState[index] then self.CurrentState[index] = {} end
             self.CurrentState[index][pindex] = value
@@ -641,8 +641,8 @@ function Module:GoToFrame(frame: number, t: number, override: boolean?): nil
         local f2Changes = f2.ModelChanges
         for i: number = 1, #f2Changes, 3 do
             local index: number = f2Changes[i]
-            local pindex: number = f2Changes[i+1]
-            local value: any = f2Changes[i+2]
+            local pindex: number = f2Changes[i + 1]
+            local value: any = f2Changes[i + 2]
             
             if self.CurrentState[index] and self.CurrentState[index][pindex] then
                 local v1: any = self.CurrentState[index][pindex]
