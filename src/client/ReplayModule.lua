@@ -409,8 +409,11 @@ end
 
 -- Registers an object as a StaticModel
 function Module:RegisterStatic(model: Instance): nil
+    if not self.Recording then
+        self.StaticModels[#self.StaticModels+1] = model
+        return
+    end
     self.ActualStaticModels[#self.ActualStaticModels + 1] = model
-    if not self.Recording then return end
     local clone = model:Clone()
     GhostPart(clone)
     table.insert(self.StaticClones, clone)
@@ -448,6 +451,7 @@ function Module:StartRecording(): nil
         end
     end
     
+    -- reregister everything, to make the clones n stuff.
     self.ActualActiveModels = {}
     self.ActualStaticModels = {}
     for _, inst in ipairs(self.ActiveModels) do
